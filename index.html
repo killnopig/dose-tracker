@@ -41,6 +41,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 </head>
 <body>
 <main>
+<div id="upd" class="card" style="display:none;cursor:pointer;text-align:center"><b>有新版本 <span id="nv"></span>，點此更新</b></div>
 <h1>注射與體重記錄</h1>
 <div class="note" id="sync" style="margin:-6px 0 10px;cursor:pointer">本機儲存</div>
 
@@ -117,6 +118,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <p>本 app 按現狀提供，不附任何保證，作者不對因使用或無法使用本 app 造成的任何後果負責。本 app 與任何藥廠或藥品品牌無關。</p>
   </div>
 </details>
+<div class="note" id="ver" style="text-align:center;margin-top:12px"></div>
 </main>
 
 <nav class="tabs">
@@ -283,6 +285,22 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
+const APP_VERSION='1.0.0';
+$('ver').textContent='版本 '+APP_VERSION;
+let updShown=false;
+async function checkUpdate(){
+  if(updShown||!/^https?:/.test(location.protocol))return;
+  try{
+    const u=new URL('index.html',location.href);u.search='';u.hash='';
+    const r=await fetch(u.href+'?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const m=(await r.text()).match(/APP_VERSION='(\d+\.\d+\.\d+)'/);
+    if(m&&m[1]!==APP_VERSION){updShown=true;$('nv').textContent=m[1];$('upd').style.display='block'}
+  }catch(e){}
+}
+$('upd').onclick=()=>{location.replace(location.pathname+'?v='+Date.now())};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
+window.addEventListener('load',()=>setTimeout(checkUpdate,1500));
 $('add').onclick=()=>{
   const date=$('f-date').value,dose=parseFloat($('f-dose').value)||0,wt=parseFloat($('f-wt').value)||0;
   if(!date){$('msg').textContent='請選擇日期。';return}
