@@ -67,6 +67,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <label for="f-note">備註（選填）</label>
     <input type="text" id="f-note" placeholder="例如 左腹、輕微噁心">
     <button id="add">儲存記錄</button>
+    <button id="cancel-edit" class="sec" style="display:none">取消編輯</button>
     <div class="note" id="msg" style="margin-top:8px"></div>
   </div>
   <div class="card" id="list"></div>
@@ -144,6 +145,20 @@ const sorted=()=>S.entries.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:
 const onBoard=(day)=>{const k=Math.LN2/(S.hl/24);let t=0;for(const e of S.entries){if(e.dose>0){const x=day-dn(e.date);if(x>=0)t+=e.dose*Math.exp(-k*x)}}return t};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let cw=null,cd=null;
+let editId=null;
+function startEdit(e){
+  editId=e.id;
+  $('f-date').value=e.date;$('f-dose').value=e.dose>0?e.dose:'';$('f-wt').value=e.wt>0?e.wt:'';
+  $('f-site').value=e.site||nextSite();$('f-note').value=e.note||'';
+  $('add').textContent='更新記錄';$('cancel-edit').style.display='block';
+  $('msg').textContent='正在編輯 '+e.date+' 的記錄。';
+  $('f-date').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function cancelEdit(){
+  editId=null;$('add').textContent='儲存記錄';$('cancel-edit').style.display='none';
+  $('f-date').value=today();$('f-dose').value='';$('f-wt').value='';$('f-note').value='';$('msg').textContent='';
+  $('f-site').value=nextSite();
+}
 const SITES=['左腹','腹中','右腹','左大腿','右大腿','左上臂','右上臂'];
 function nextSite(){const l=sorted().filter(e=>e.dose>0&&e.site).pop();const i=l?SITES.indexOf(l.site):-1;return SITES[(i+1)%SITES.length]}
 SITES.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;$('f-site').appendChild(o)});
@@ -162,7 +177,7 @@ function render(){
   const last=ds[ds.length-1];
   if(last){const due=dn(last.date)+7,left=due-dn(today());const wd='日一二三四五六'[new Date(due*864e5).getUTCDay()];$('s-n').textContent='下次注射：'+md(fromDn(due))+'（週'+wd+'）';$('s-ns').textContent=(left>0?'還有 '+left+' 天':left===0?'就是今天':'已逾期 '+(-left)+' 天')+'，建議部位：'+nextSite()}
   else{$('s-n').textContent='尚無注射記錄';$('s-ns').textContent='建議第一針部位：'+SITES[0]}
-  $('f-site').value=nextSite();
+  if(editId===null)$('f-site').value=nextSite();
   const L=$('list');L.textContent='';
   if(!es.length){const d=document.createElement('div');d.className='empty';d.textContent='還沒有記錄，先新增第一筆吧。';L.appendChild(d)}
   es.slice().reverse().forEach(e=>{
@@ -176,8 +191,10 @@ function render(){
     l.appendChild(a);l.appendChild(b);
     if(e.note){const n=document.createElement('small');n.textContent=e.note;l.appendChild(n)}
     const x=document.createElement('button');x.className='x';x.textContent='刪除';
-    x.onclick=()=>{if(x.dataset.c){S.entries=S.entries.filter(z=>z.id!==e.id);save();render();drawCharts()}else{x.dataset.c=1;x.textContent='再按一次確認';setTimeout(()=>{x.dataset.c='';x.textContent='刪除'},3000)}};
-    it.appendChild(l);it.appendChild(x);L.appendChild(it);
+    x.onclick=()=>{if(x.dataset.c){if(editId===e.id)cancelEdit();S.entries=S.entries.filter(z=>z.id!==e.id);save();render();drawCharts()}else{x.dataset.c=1;x.textContent='再按一次確認';setTimeout(()=>{x.dataset.c='';x.textContent='刪除'},3000)}};
+    const ed=document.createElement('button');ed.className='x';ed.textContent='編輯';ed.onclick=()=>startEdit(e);
+    const bx=document.createElement('div');bx.style.cssText='display:flex;gap:6px;flex-shrink:0';bx.appendChild(ed);bx.appendChild(x);
+    it.appendChild(l);it.appendChild(bx);L.appendChild(it);
   });
 }
 
@@ -285,7 +302,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.1.0';
 $('ver').textContent='版本 '+APP_VERSION;
 let updShown=false;
 async function checkUpdate(){
@@ -298,6 +315,7 @@ async function checkUpdate(){
     if(m&&m[1]!==APP_VERSION){updShown=true;$('nv').textContent=m[1];$('upd').style.display='block'}
   }catch(e){}
 }
+$('cancel-edit').onclick=cancelEdit;
 $('upd').onclick=()=>{location.replace(location.pathname+'?v='+Date.now())};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 window.addEventListener('load',()=>setTimeout(checkUpdate,1500));
@@ -305,9 +323,13 @@ $('add').onclick=()=>{
   const date=$('f-date').value,dose=parseFloat($('f-dose').value)||0,wt=parseFloat($('f-wt').value)||0;
   if(!date){$('msg').textContent='請選擇日期。';return}
   if(!(dose>0)&&!(wt>0)){$('msg').textContent='請至少輸入劑量或體重其中一項。';return}
-  S.entries.push({id:Date.now(),date,dose,wt,site:dose>0?$('f-site').value:'',note:$('f-note').value.trim()});
+  const rec={date,dose,wt,site:dose>0?$('f-site').value:'',note:$('f-note').value.trim()};
+  const was=editId!==null;
+  const t=was?S.entries.find(z=>z.id===editId):null;
+  if(t)Object.assign(t,rec);else S.entries.push(Object.assign({id:Date.now()},rec));
+  cancelEdit();
   save();$('f-dose').value='';$('f-wt').value='';$('f-note').value='';
-  $('msg').textContent='已儲存。';render();
+  $('msg').textContent=was?'已更新。':'已儲存。';render();
 };
 $('hl').value=S.hl;
 $('h').value=S.h||'';$('tw').value=S.tw||'';
