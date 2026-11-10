@@ -142,7 +142,7 @@ const sorted=()=>S.entries.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:
 const onBoard=(day)=>{const k=Math.LN2/(S.hl/24);let t=0;for(const e of S.entries){if(e.dose>0){const x=day-dn(e.date);if(x>=0)t+=e.dose*Math.exp(-k*x)}}return t};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let cw=null,cd=null;
-const SITES=['左腹','右腹','左大腿','右大腿','左上臂','右上臂'];
+const SITES=['左腹','腹中','右腹','左大腿','右大腿','左上臂','右上臂'];
 function nextSite(){const l=sorted().filter(e=>e.dose>0&&e.site).pop();const i=l?SITES.indexOf(l.site):-1;return SITES[(i+1)%SITES.length]}
 SITES.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;$('f-site').appendChild(o)});
 
