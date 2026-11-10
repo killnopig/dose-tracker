@@ -142,6 +142,8 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <b>備份與還原</b>
     <p class="note">未連線 Google Drive 時，資料只存在這支手機的瀏覽器中，清除瀏覽資料或換手機會遺失。仍建議定期產生備份文字另存。</p>
     <textarea id="bk" rows="5"></textarea>
+    <label for="bk-file">或選擇備份檔（.json 或 .txt）</label>
+    <input type="file" id="bk-file" accept=".json,.txt,application/json,text/plain">
     <button id="exp" class="sec">產生備份文字</button>
     <button id="imp" class="sec">從文字還原</button>
     <div class="note" id="bmsg" style="margin-top:8px"></div>
@@ -437,7 +439,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.4.0';
+const APP_VERSION='1.4.1';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -452,6 +454,11 @@ async function checkUpdate(){
   }catch(e){}
 }
 $('cancel-edit').onclick=cancelEdit;
+$('bk-file').onchange=async ev=>{
+  const f=ev.target.files&&ev.target.files[0];if(!f)return;
+  try{$('bk').value=await f.text();$('bmsg').textContent='已讀入「'+f.name+'」，確認後按「從文字還原」。'}
+  catch(e){$('bmsg').textContent='讀取檔案失敗。'}
+};
 $('f-more').ontoggle=()=>{moreTouched=true};
 $('ai-copy').onclick=async()=>{
   const t=$('ai-prompt');
