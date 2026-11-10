@@ -107,6 +107,36 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <button id="exp" class="sec">產生備份文字</button>
     <button id="imp" class="sec">從文字還原</button>
     <div class="note" id="bmsg" style="margin-top:8px"></div>
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;font-weight:600">從其他 App 或 Excel 匯入</summary>
+      <div class="note" style="margin-top:10px;line-height:1.7">
+        <p>不同 App 的匯出格式都不一樣，建議請 AI 幫你轉成本 app 吃得進去的格式：</p>
+        <ol style="padding-left:20px">
+          <li>按「複製提示詞」。</li>
+          <li>貼到你慣用的 AI 對話，並把你的記錄（從 Excel 複製的表格、CSV 內容都可以）貼在提示詞最後面。</li>
+          <li>把 AI 回覆的內容複製起來，貼進上面的備份文字框，按「從文字還原」。</li>
+        </ol>
+        <p>注意：還原會取代目前所有資料。請先按「產生備份文字」另存一份；想保留現有記錄的話，把現有備份文字也一併貼給 AI，請它合併。</p>
+        <p>你的記錄會傳給你使用的 AI 服務，請自行評估是否適合。</p>
+      </div>
+      <textarea id="ai-prompt" readonly rows="6">請把我貼上的施打與體重記錄，轉換成下面格式的 JSON。只輸出 JSON，不要加任何說明文字。
+
+格式：
+{"entries":[{"date":"YYYY-MM-DD","dose":劑量數字,"wt":體重數字,"site":"部位","note":"備註"}],"hl":120,"h":0,"tw":0}
+
+規則：
+1. date 必須是 YYYY-MM-DD。如果我的資料沒有年份，或日期有歧義（例如 03/04 可能是 3 月 4 日或 4 月 3 日），請先問我，不要自己猜。
+2. dose 是注射劑量（mg），wt 是體重（kg）。同一天的劑量和體重放同一筆；只有其中一項時，另一項填 0。
+3. 如果體重單位是磅（lb），請換算成公斤，四捨五入到小數 1 位。
+4. site 只能是這七個之一：左腹、腹中、右腹、左大腿、右大腿、左上臂、右上臂。沒有部位或對不上就填空字串 ""，並把原本的部位文字寫進 note。
+5. 依日期由舊到新排序。
+6. 資料裡沒有的內容不要編造。
+7. hl 是藥物半衰期（小時），不知道就填 120；h 是身高（cm）、tw 是目標體重（kg），不知道就填 0。
+
+以下是我的資料：
+（把你的記錄貼在這裡）</textarea>
+      <button id="ai-copy" class="sec">複製提示詞</button>
+    </details>
   </div>
 </section>
 <details class="card" style="margin-top:16px">
@@ -302,7 +332,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.1.0';
+const APP_VERSION='1.2.0';
 $('ver').textContent='版本 '+APP_VERSION;
 let updShown=false;
 async function checkUpdate(){
@@ -316,6 +346,11 @@ async function checkUpdate(){
   }catch(e){}
 }
 $('cancel-edit').onclick=cancelEdit;
+$('ai-copy').onclick=async()=>{
+  const t=$('ai-prompt');
+  try{await navigator.clipboard.writeText(t.value)}catch(e){t.select();try{document.execCommand('copy')}catch(e2){}}
+  $('ai-copy').textContent='已複製';setTimeout(()=>$('ai-copy').textContent='複製提示詞',1500);
+};
 $('upd').onclick=()=>{location.replace(location.pathname+'?v='+Date.now())};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 window.addEventListener('load',()=>setTimeout(checkUpdate,1500));
@@ -337,9 +372,9 @@ $('save-prof').onclick=()=>{S.h=parseFloat($('h').value)||0;S.tw=parseFloat($('t
 $('save-hl').onclick=()=>{const v=parseFloat($('hl').value);if(v>0){S.hl=v;save();render();$('save-hl').textContent='已儲存';setTimeout(()=>$('save-hl').textContent='儲存半衰期',1500)}};
 $('exp').onclick=()=>{$('bk').value=JSON.stringify(S);$('bk').select();$('bmsg').textContent='請全選複製，貼到備忘錄或傳給自己保存。'};
 $('imp').onclick=()=>{
-  try{const p=JSON.parse($('bk').value);if(!p||!Array.isArray(p.entries))throw 0;
-    S={entries:p.entries.filter(e=>e&&typeof e.date==='string').map((e,i)=>({id:e.id||Date.now()+i,date:e.date,dose:+e.dose||0,wt:+e.wt||0,note:String(e.note||''),site:SITES.includes(e.site)?e.site:''})),hl:Number(p.hl)||120,h:Number(p.h)||0,tw:Number(p.tw)||0};
-    save();$('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();$('bmsg').textContent='已還原 '+S.entries.length+' 筆記錄。'}
+  try{const p=JSON.parse($('bk').value.replace(/```(json)?/g,'').trim());if(!p||!Array.isArray(p.entries))throw 0;
+    S={entries:p.entries.filter(e=>e&&typeof e.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(e.date)).map((e,i)=>({id:e.id||Date.now()+i,date:e.date,dose:+e.dose||0,wt:+e.wt||0,note:String(e.note||''),site:SITES.includes(e.site)?e.site:''})),hl:Number(p.hl)||120,h:Number(p.h)||0,tw:Number(p.tw)||0};
+    save();$('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();$('bmsg').textContent='已還原 '+S.entries.length+' 筆記錄'+(p.entries.length>S.entries.length?'，略過 '+(p.entries.length-S.entries.length)+' 筆日期格式不正確的記錄':'')+'。'}
   catch(e){$('bmsg').textContent='格式不正確，請貼上完整的備份文字。'}
 };
 render();
