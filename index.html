@@ -293,8 +293,20 @@ function render(){
 }
 
 let cbp=null,cbc=null,cbmi=null,cbm=null;
+function showErr(cid,e){
+  const p=$(cid).parentNode;let m=p.querySelector('.cerr');
+  if(!m){m=document.createElement('div');m.className='note cerr';p.appendChild(m)}
+  m.textContent='圖表產生失敗：'+(e&&e.message?e.message:e);
+}
 function drawCharts(){
-  if(typeof Chart==='undefined')return;
+  document.querySelectorAll('.cerr').forEach(n=>n.remove());
+  if(typeof Chart==='undefined'){
+    ['card-w','card-d','card-bp','card-bmi','card-bm','card-bc'].forEach(id=>{$(id).style.display='none'});
+    $('chart-empty').textContent='圖表函式庫載入失敗，請確認網路或 VPN 沒有擋住 cdnjs.cloudflare.com，然後重新整理頁面。';
+    $('chart-empty').style.display='';
+    return;
+  }
+  const mk=(cid,cfg)=>{try{return new Chart($(cid),cfg)}catch(e){showErr(cid,e);return null}};
   const tx=css('--tx'),mu=css('--mu'),ln=css('--ln'),dc=css('--dose'),wc=css('--wt'),c3=css('--c3'),c4=css('--c4');
   Chart.defaults.color=mu;Chart.defaults.font.family='"Noto Sans TC",system-ui,sans-serif';
   const es=sorted(),ws=es.filter(e=>e.wt>0),ds=es.filter(e=>e.dose>0);
@@ -305,45 +317,45 @@ function drawCharts(){
   const bm=es.filter(e=>e.bage>0||e.bmr>0),hb=S.h>0&&ws.length>0;
   sh('card-bmi',hb);sh('card-bm',bm.length>0);
   sh('chart-empty',!(ws.length||ds.length||bs.length||bc.length||bm.length));
-  const grid={color:ln},tk={maxTicksLimit:8};
-  const leg={labels:{color:tx,boxWidth:12}};
-  const ln3=(label,data,color,extra)=>Object.assign({label,data,borderColor:color,backgroundColor:color,tension:.25,pointRadius:3,spanGaps:true},extra||{});
+  const grid=()=>({color:ln}),tk=()=>({maxTicksLimit:8});
+  const leg=()=>({labels:{color:tx,boxWidth:12}});
+  const ln3=(label,data,color,extra)=>Object.assign({label,data,borderColor:color,backgroundColor:color,tension:.25,pointRadius:data.length>80?1.5:3,spanGaps:true},extra||{});
   if(ws.length){
-    cw=new Chart($('c-w'),{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[ln3('體重 (kg)',ws.map(e=>e.wt),wc)].concat(S.tw>0?[{label:'目標 '+S.tw+' kg',data:ws.map(()=>S.tw),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]:[])},
-      options:{maintainAspectRatio:false,plugins:{legend:{display:S.tw>0,labels:leg.labels}},scales:{x:{grid,ticks:tk},y:{grid}}}});
+    cw=mk('c-w',{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[ln3('體重 (kg)',ws.map(e=>e.wt),wc)].concat(S.tw>0?[{label:'目標 '+S.tw+' kg',data:ws.map(()=>S.tw),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]:[])},
+      options:{maintainAspectRatio:false,plugins:{legend:{display:S.tw>0,labels:leg().labels}},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}});
   }
   if(ds.length){
     const labels=[],doses=[],ob=[];
     const a=dn(ds[0].date),b=Math.max(dn(today()),dn(ds[ds.length-1].date))+7;
     const dm={};ds.forEach(e=>{dm[e.date]=(dm[e.date]||0)+e.dose});
     for(let i=a;i<=b;i++){const s2=fromDn(i);labels.push(md(s2));doses.push(dm[s2]||null);ob.push(+onBoard(i).toFixed(2))}
-    cd=new Chart($('c-d'),{data:{labels,datasets:[
+    cd=mk('c-d',{data:{labels,datasets:[
       {type:'bar',label:'注射劑量 (mg)',data:doses,backgroundColor:dc,order:2},
       {type:'line',label:'預估殘留 (mg)',data:ob,borderColor:wc,backgroundColor:wc,pointRadius:0,tension:.3,order:1}]},
-      options:{maintainAspectRatio:false,plugins:{legend:leg},scales:{x:{grid,ticks:tk},y:{grid,beginAtZero:true}}}});
+      options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid(),beginAtZero:true}}}});
   }
   if(bs.length){
     const ds3=[ln3('收縮壓',bs.map(e=>e.sys),c3),ln3('舒張壓',bs.map(e=>e.dia),c4)];
     if(bs.some(e=>e.pul>0))ds3.push(ln3('脈搏',bs.map(e=>e.pul>0?e.pul:null),mu,{borderDash:[4,3],pointRadius:2}));
-    cbp=new Chart($('c-bp'),{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},
-      options:{maintainAspectRatio:false,plugins:{legend:leg},scales:{x:{grid,ticks:tk},y:{grid}}}});
+    cbp=mk('c-bp',{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},
+      options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}});
   }
   if(hb){
     const m2=(S.h/100)*(S.h/100);
     const labs=ws.map(e=>md(e.date));
-    cbmi=new Chart($('c-bmi'),{type:'line',data:{labels:labs,datasets:[
+    cbmi=mk('c-bmi',{type:'line',data:{labels:labs,datasets:[
       ln3('BMI',ws.map(e=>+(e.wt/m2).toFixed(1)),wc),
       {label:'過重 24',data:ws.map(()=>24),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1,pointRadius:0},
       {label:'肥胖 27',data:ws.map(()=>27),borderColor:mu,backgroundColor:mu,borderDash:[2,3],borderWidth:1,pointRadius:0}]},
-      options:{maintainAspectRatio:false,plugins:{legend:leg},scales:{x:{grid,ticks:tk},y:{grid}}}});
+      options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}});
   }
   if(bm.length){
     const hg=bm.some(e=>e.bage>0),hr=bm.some(e=>e.bmr>0);
     const d2=[];
     if(hg)d2.push(ln3('身體年齡（歲）',bm.map(e=>e.bage>0?e.bage:null),c3,{yAxisID:'y'}));
     if(hr)d2.push(ln3('基礎代謝 (kcal)',bm.map(e=>e.bmr>0?e.bmr:null),c4,{yAxisID:'y1'}));
-    cbm=new Chart($('c-bm'),{type:'line',data:{labels:bm.map(e=>md(e.date)),datasets:d2},
-      options:{maintainAspectRatio:false,plugins:{legend:leg},scales:{x:{grid,ticks:tk},y:{grid,display:hg,position:'left'},y1:{display:hr,position:'right',grid:{drawOnChartArea:false}}}}});
+    cbm=mk('c-bm',{type:'line',data:{labels:bm.map(e=>md(e.date)),datasets:d2},
+      options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid(),display:hg,position:'left'},y1:{display:hr,position:'right',grid:{drawOnChartArea:false}}}}});
   }
   if(bc.length){
     const hf=bc.some(e=>e.fat>0),hm=bc.some(e=>e.mus>0),hv=bc.some(e=>e.vis>0);
@@ -351,8 +363,8 @@ function drawCharts(){
     if(hf)dsb.push(ln3('體脂率 (%)',bc.map(e=>e.fat>0?e.fat:null),c3,{yAxisID:'y'}));
     if(hm)dsb.push(ln3('骨骼肌率 (%)',bc.map(e=>e.mus>0?e.mus:null),c4,{yAxisID:'y'}));
     if(hv)dsb.push(ln3('內臟脂肪等級',bc.map(e=>e.vis>0?e.vis:null),wc,{yAxisID:'y1'}));
-    const sc={x:{grid,ticks:tk},y:{grid,display:hf||hm,position:'left'},y1:{display:hv,position:'right',grid:{drawOnChartArea:false}}};
-    cbc=new Chart($('c-bc'),{type:'line',data:{labels:bc.map(e=>md(e.date)),datasets:dsb},options:{maintainAspectRatio:false,plugins:{legend:leg},scales:sc}});
+    const sc={x:{grid:grid(),ticks:tk()},y:{grid:grid(),display:hf||hm,position:'left'},y1:{display:hv,position:'right',grid:{drawOnChartArea:false}}};
+    cbc=mk('c-bc',{type:'line',data:{labels:bc.map(e=>md(e.date)),datasets:dsb},options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:sc}});
   }
 }
 
@@ -439,7 +451,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.4.1';
+const APP_VERSION='1.4.2';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
