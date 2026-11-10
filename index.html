@@ -94,7 +94,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
   </div>
   <div class="card">
     <b>備份與還原</b>
-    <p class="note">資料會自動備份到你的 Claude 帳號雲端，換手機或清除瀏覽資料後重新開啟就會還原。仍建議偶爾產生備份文字另存一份。</p>
+    <p class="note">資料只存在這支手機的瀏覽器中。清除瀏覽資料、換手機或換瀏覽器都會遺失，請定期產生備份文字另存。</p>
     <textarea id="bk" rows="5"></textarea>
     <button id="exp" class="sec">產生備份文字</button>
     <button id="imp" class="sec">從文字還原</button>
@@ -105,9 +105,9 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
   <summary style="cursor:pointer;font-weight:600">關於本 app 與免責聲明</summary>
   <div class="note" style="margin-top:10px;line-height:1.7">
     <p>本 app 是個人記錄與趨勢檢視工具，不是醫療器材，也不提供診斷、治療或用藥建議。</p>
-    <p>「預估體內殘留」是依半衰期做的簡化指數衰減估算，假設注射後立即吸收，與實際血中濃度不同，不可用來決定劇量。BMI 分類和「建議注射部位、下次注射日」只是輔助提醒，請以醫師或藥師的指示和藥品介紹為準。</p>
+    <p>「預估體內殘留」是依半衰期做的簡化指數衰減估算，假設注射後立即吸收，與實際血中濃度不同，不可用來決定劑量。BMI 分類和「建議注射部位、下次注射日」只是輔助提醒，請以醫師或藥師的指示和藥品介紹為準。</p>
     <p>用藥、調整劑量、漏打或出現不適症狀時，請詢問你的醫師或藥師；緊急狀況請立即就醫。</p>
-    <p>資料由使用者自行輸入，儲存在你的裝置瀏覽器，若啟用雲端備份則也存在你自己的帳號中。請自行定期備份，作者不保證資料不會遺失。</p>
+    <p>資料由使用者自行輸入，儲存在你的裝置瀏覽器，不會上傳到任何伺服器。請自行定期備份，作者不保證資料不會遺失。</p>
     <p>本 app 按現狀提供，不附任何保證，作者不對因使用或無法使用本 app 造成的任何後果負責。本 app 與任何藥廠或藥品品牌無關。</p>
   </div>
 </details>
@@ -210,7 +210,7 @@ function schedPush(){if(!dref)return;setSync('同步中…');clearTimeout(tmr);t
     for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
     if(!window.claude)throw 0;
     const [db,user]=await Promise.all([claude.use('db'),claude.use('user')]);
-    if(!db||!user){setSync('僅儲存在本機（請登入 Claude 以啟用雲端備份）');return}
+    if(!db||!user){setSync('僅儲存在本機');return}
     const id=await user.id();
     dref=db.doc('data/users/'+id+'/app/state');
     const snap=await dref.get();
