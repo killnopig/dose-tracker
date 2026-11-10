@@ -42,7 +42,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 <body>
 <main>
 <h1>注射與體重記錄</h1>
-<div class="note" id="sync" style="margin:-6px 0 10px">本機儲存</div>
+<div class="note" id="sync" style="margin:-6px 0 10px;cursor:pointer">本機儲存</div>
 
 <section id="p-log" class="pane on">
   <div class="stats">
@@ -93,8 +93,14 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <button id="save-hl">儲存半衰期</button>
   </div>
   <div class="card">
+    <b>Google Drive 雲端備份</b>
+    <p class="note">登入你自己的 Google 帳號後，資料會備份到你 Drive 裡的隱藏應用程式資料夾，只有這個網頁能讀寫，作者看不到你的資料。</p>
+    <button id="gd-btn">連線 Google Drive</button>
+    <button id="gd-off" class="sec" style="display:none">中斷連線</button>
+  </div>
+  <div class="card">
     <b>備份與還原</b>
-    <p class="note">資料只存在這支手機的瀏覽器中。清除瀏覽資料、換手機或換瀏覽器都會遺失，請定期產生備份文字另存。</p>
+    <p class="note">未連線 Google Drive 時，資料只存在這支手機的瀏覽器中，清除瀏覽資料或換手機會遺失。仍建議定期產生備份文字另存。</p>
     <textarea id="bk" rows="5"></textarea>
     <button id="exp" class="sec">產生備份文字</button>
     <button id="imp" class="sec">從文字還原</button>
@@ -107,7 +113,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <p>本 app 是個人記錄與趨勢檢視工具，不是醫療器材，也不提供診斷、治療或用藥建議。</p>
     <p>「預估體內殘留」是依半衰期做的簡化指數衰減估算，假設注射後立即吸收，與實際血中濃度不同，不可用來決定劑量。BMI 分類和「建議注射部位、下次注射日」只是輔助提醒，請以醫師或藥師的指示和藥品介紹為準。</p>
     <p>用藥、調整劑量、漏打或出現不適症狀時，請詢問你的醫師或藥師；緊急狀況請立即就醫。</p>
-    <p>資料由使用者自行輸入，儲存在你的裝置瀏覽器，不會上傳到任何伺服器。請自行定期備份，作者不保證資料不會遺失。</p>
+    <p>資料由使用者自行輸入，儲存在你的裝置瀏覽器；若你連線 Google Drive，也會備份在你自己的 Drive 中，作者無法存取。請自行定期備份，作者不保證資料不會遺失。</p>
     <p>本 app 按現狀提供，不附任何保證，作者不對因使用或無法使用本 app 造成的任何後果負責。本 app 與任何藥廠或藥品品牌無關。</p>
   </div>
 </details>
@@ -119,6 +125,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
   <button data-t="set">設定</button>
 </nav>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const K='dosetrack-v1';
@@ -201,32 +208,81 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 });
 
 $('f-date').value=today();
-let dref=null,tmr=null;
+const GOOGLE_CLIENT_ID='157434461885-nmum0qv1h34r1u9f0scn7g75u7s09iiu.apps.googleusercontent.com';
+const FN='dose-tracker.json',SCOPE='https://www.googleapis.com/auth/drive.appdata';
+let tok=null,tokExp=0,tc=null,fid=null,tmr=null,linked=false;
+try{linked=localStorage.getItem('dt-linked')==='1'}catch(e){}
 const setSync=t=>{$('sync').textContent=t};
-async function pushRemote(){if(!dref)return;try{await dref.set({json:JSON.stringify(S)});setSync('已同步到雲端')}catch(e){setSync('雲端同步失敗，資料仍在本機')}}
-function schedPush(){if(!dref)return;setSync('同步中…');clearTimeout(tmr);tmr=setTimeout(pushRemote,800)}
-(async()=>{
+const ready=()=>tok&&Date.now()<tokExp-60000;
+function updUI(){
+  $('gd-btn').textContent=linked?(ready()?'立即同步':'重新連線 Google Drive'):'連線 Google Drive';
+  $('gd-off').style.display=linked?'block':'none';
+}
+async function gfetch(url,opt){
+  opt=opt||{};
+  const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+tok},opt.headers||{})}));
+  if(r.status===401){tok=null;throw new Error('auth')}
+  if(!r.ok)throw new Error('http '+r.status);
+  return r;
+}
+async function findFile(){
+  const r=await gfetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&q='+encodeURIComponent("name='"+FN+"'"));
+  const j=await r.json();fid=j.files&&j.files[0]?j.files[0].id:null;
+}
+async function pushRemote(){
+  if(!ready()){setSync('Google Drive 需要重新連線（點此重新連線）');updUI();return}
   try{
-    for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
-    if(!window.claude)throw 0;
-    const [db,user]=await Promise.all([claude.use('db'),claude.use('user')]);
-    if(!db||!user){setSync('僅儲存在本機');return}
-    const id=await user.id();
-    dref=db.doc('data/users/'+id+'/app/state');
-    const snap=await dref.get();
-    if(snap.exists){
-      const r=JSON.parse(snap.data().json);
-      if(r&&Array.isArray(r.entries)&&(r.ts||0)>(S.ts||0)){
-        S={entries:r.entries,hl:Number(r.hl)||120,h:Number(r.h)||0,tw:Number(r.tw)||0,ts:r.ts};
-        try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
-        $('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();
-        if($('p-chart').classList.contains('on'))drawCharts();
-        setSync('已從雲端載入');return;
-      }
+    const data=JSON.stringify(S);
+    if(fid){await gfetch('https://www.googleapis.com/upload/drive/v3/files/'+fid+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body:data})}
+    else{
+      const bd='dtb'+Date.now();
+      const body='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:FN,parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: application/json\r\n\r\n'+data+'\r\n--'+bd+'--';
+      const r=await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body});
+      fid=(await r.json()).id;
     }
-    await pushRemote();
-  }catch(e){setSync('僅儲存在本機')}
-})();
+    setSync('已備份到 Google Drive');
+  }catch(e){setSync('Drive 備份失敗，資料仍在本機（點此重新連線）')}
+}
+function schedPush(){if(!linked)return;setSync('同步中…');clearTimeout(tmr);tmr=setTimeout(pushRemote,800)}
+async function pullAndMerge(){
+  await findFile();
+  if(fid){
+    const r=await gfetch('https://www.googleapis.com/drive/v3/files/'+fid+'?alt=media');
+    const d=await r.json();
+    if(d&&Array.isArray(d.entries)&&(d.ts||0)>(S.ts||0)){
+      S={entries:d.entries,hl:Number(d.hl)||120,h:Number(d.h)||0,tw:Number(d.tw)||0,ts:d.ts};
+      try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
+      $('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();
+      if($('p-chart').classList.contains('on'))drawCharts();
+      setSync('已從 Google Drive 載入');return;
+    }
+  }
+  await pushRemote();
+}
+function connect(interactive){
+  if(GOOGLE_CLIENT_ID.startsWith('YOUR_')){setSync('尚未設定 Google Client ID，目前僅儲存在本機');return}
+  if(!window.google||!google.accounts){setSync('Google 登入元件尚未載入，請稍後再試');return}
+  if(!tc)tc=google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,
+    callback:async r=>{
+      if(r.error||!r.access_token){setSync('Google 連線失敗（點此重新連線）');updUI();return}
+      tok=r.access_token;tokExp=Date.now()+(r.expires_in||3600)*1000;linked=true;
+      try{localStorage.setItem('dt-linked','1')}catch(e){}
+      try{await pullAndMerge()}catch(e){setSync('Drive 同步失敗，資料仍在本機（點此重新連線）')}
+      updUI();
+    },
+    error_callback:()=>{setSync('Google Drive 需要重新連線（點此重新連線）');updUI()}});
+  tc.requestAccessToken({prompt:interactive?'':'none'});
+}
+$('sync').onclick=()=>{if(linked&&!ready())connect(true)};
+$('gd-btn').onclick=()=>{if(linked&&ready()){setSync('同步中…');pullAndMerge().catch(()=>setSync('Drive 同步失敗，資料仍在本機'))}else connect(true)};
+$('gd-off').onclick=()=>{
+  try{if(tok&&window.google)google.accounts.oauth2.revoke(tok)}catch(e){}
+  tok=null;linked=false;fid=null;try{localStorage.removeItem('dt-linked')}catch(e){}
+  setSync('本機儲存（已中斷 Google Drive）');updUI();
+};
+updUI();
+if(linked)setSync('Google Drive 已連結，連線中…');
+window.addEventListener('load',()=>{if(linked)connect(false)});
 $('add').onclick=()=>{
   const date=$('f-date').value,dose=parseFloat($('f-dose').value)||0,wt=parseFloat($('f-wt').value)||0;
   if(!date){$('msg').textContent='請選擇日期。';return}
