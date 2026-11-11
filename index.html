@@ -139,6 +139,12 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 
 <section id="p-set" class="pane">
   <div class="card">
+    <b>Google Drive 雲端備份</b>
+    <p class="note">登入你自己的 Google 帳號後，資料會備份到你 Drive 裡的隱藏應用程式資料夾，只有這個網頁能讀寫，作者看不到你的資料。</p>
+    <button id="gd-btn">連線 Google Drive</button>
+    <button id="gd-off" class="sec" style="display:none">中斷連線</button>
+  </div>
+  <div class="card">
     <div class="row">
       <div><label for="h">身高 (cm)</label><input type="number" id="h" inputmode="decimal" min="50" max="250"></div>
       <div><label for="tw">目標體重 (kg)</label><input type="number" id="tw" inputmode="decimal" min="20" step="0.1"></div>
@@ -173,12 +179,6 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <div class="note" id="om-sum" style="margin-top:8px;line-height:1.7"></div>
     <button id="om-go" style="display:none">確認匯入</button>
     <button id="om-undo" class="sec" style="display:none">復原上次匯入</button>
-  </div>
-  <div class="card">
-    <b>Google Drive 雲端備份</b>
-    <p class="note">登入你自己的 Google 帳號後，資料會備份到你 Drive 裡的隱藏應用程式資料夾，只有這個網頁能讀寫，作者看不到你的資料。</p>
-    <button id="gd-btn">連線 Google Drive</button>
-    <button id="gd-off" class="sec" style="display:none">中斷連線</button>
   </div>
   <div class="card">
     <b>備份與還原</b>
@@ -306,7 +306,7 @@ function render(){
   $('s-o').textContent=ds.length?onBoard(dn(today())).toFixed(1):'–';
   const lw=ws.length?ws[ws.length-1].wt:0;
   if(lw&&S.h>0){const m=S.h/100,b=lw/(m*m);$('s-b').textContent=b.toFixed(1);$('s-bs').textContent='BMI（'+(b<18.5?'過輕':b<24?'正常':b<27?'過重':'肥胖')+'）'}else{$('s-b').textContent='–';$('s-bs').textContent='BMI（請在設定輸入身高）'}
-  if(lw&&S.tw>0){const g=lw-S.tw;$('s-t').textContent=g>0?g.toFixed(1):'已達成';$('s-ts').textContent='距離目標 '+S.tw+' kg'}else{$('s-t').textContent='–';$('s-ts').textContent='距離目標（請在設定輸入）'}
+  if(lw&&S.tw>0){const g=lw-S.tw;$('s-t').textContent=g>0?g.toFixed(1):'已達成';$('s-ts').textContent='距離目標 '+S.tw+' kg，還有 (kg)'}else{$('s-t').textContent='–';$('s-ts').textContent='距離目標（請在設定輸入）'}
   const last=ds[ds.length-1];
   if(last){const due=dn(last.date)+7,left=due-dn(today());const wd='日一二三四五六'[new Date(due*864e5).getUTCDay()];$('s-n').textContent='下次注射：'+md(fromDn(due))+'（週'+wd+'）';$('s-n').style.color=left<=0?'var(--wt)':'';$('s-ns').textContent=(left>0?'還有 '+left+' 天':left===0?'就是今天':'已逾期 '+(-left)+' 天')+'，建議部位：'+nextSite()}
   else{$('s-n').textContent='尚無注射記錄';$('s-ns').textContent='建議第一針部位：'+SITES[0]}
@@ -775,7 +775,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.0';
+const APP_VERSION='1.9.2';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
