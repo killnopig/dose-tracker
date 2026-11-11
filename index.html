@@ -779,7 +779,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.4';
+const APP_VERSION='1.9.5';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -908,8 +908,21 @@ function omApply(plan){
 function omUndoUI(){try{$('om-undo').style.display=localStorage.getItem(K+'-undo')?'block':'none'}catch(e){}}
 let omPlanData=null;
 /* ---------- Health Connect（僅 Android APK，需要原生外掛） ---------- */
-const hcPlugin=()=>{try{const C=window.Capacitor;if(!C||!C.registerPlugin)return null;const nat=C.isNativePlatform?C.isNativePlatform():(C.getPlatform?C.getPlatform()!=='web':false);return nat?C.registerPlugin('Health'):null}catch(e){return null}};
-function hcInfo(){try{const C=window.Capacitor;if(!C)return '診斷：找不到 Capacitor（目前是一般網頁，不是 APK 外殼，或外殼沒有注入橋接程式）。';return '診斷：Capacitor 存在；平台 '+(C.getPlatform?C.getPlatform():'?')+'；原生 '+(C.isNativePlatform?C.isNativePlatform():'?')+'；Health 外掛 '+(C.isPluginAvailable?C.isPluginAvailable('Health'):'?')+'。'}catch(e){return '診斷失敗：'+e.message}}
+let hcErr='';
+function hcAndroid(){try{const C=window.Capacitor;if(!C)return false;return C.isNativePlatform?!!C.isNativePlatform():(C.getPlatform?C.getPlatform()!=='web':false)}catch(e){return false}}
+function hcPlugin(){
+  hcErr='';
+  try{
+    const C=window.Capacitor;
+    if(!C){hcErr='找不到 Capacitor';return null}
+    if(!hcAndroid()){hcErr='不是原生平台';return null}
+    if(C.Plugins&&C.Plugins.Health)return C.Plugins.Health;
+    if(C.registerPlugin)return C.registerPlugin('Health');
+    hcErr='沒有 registerPlugin';
+  }catch(e){hcErr='取得外掛時發生錯誤：'+(e&&e.message?e.message:e)}
+  return null;
+}
+function hcInfo(){try{const C=window.Capacitor;if(!C)return '診斷：找不到 Capacitor（目前是一般網頁，不是 APK 外殼，或外殼沒有注入橋接程式）。';return '診斷：Capacitor 存在；平台 '+(C.getPlatform?C.getPlatform():'?')+'；原生 '+(C.isNativePlatform?C.isNativePlatform():'?')+'；Health 外掛 '+(C.isPluginAvailable?C.isPluginAvailable('Health'):'?')+(hcErr?'；'+hcErr:'')+'。'}catch(e){return '診斷失敗：'+e.message}}
 function omShow(plan){
   const out=$('om-sum');out.textContent='';
   plan.info.forEach(st=>{
@@ -921,7 +934,7 @@ function omShow(plan){
 }
 async function hcSync(){
   const H=hcPlugin(),out=$('om-sum'),line=t=>{const d=document.createElement('div');d.textContent=t;out.appendChild(d)};
-  if(!H){out.textContent='這個功能只能在 Android APK 中使用。';return}
+  if(!H){out.textContent='無法取得 Health Connect 外掛。'+(hcErr?hcErr+'。':'這個功能只能在 Android APK 中使用。');return}
   const days=+$('hc-days').value||30,allSrc=$('hc-all').checked,errs=[];
   out.textContent='正在連線 Health Connect…';$('om-go').style.display='none';omPlanData=null;
   try{
@@ -974,7 +987,9 @@ async function hcSync(){
   }catch(e){out.textContent='Health Connect 同步失敗：'+(e&&e.message?e.message:e)+'。如果訊息提到外掛未實作，代表這個 APK 尚未包含 Health Connect 外掛，請依 README 重新建置。'}
 }
 function hcInit(){
-  if(hcPlugin()){$('hc-box').style.display='block';$('hc-btn').onclick=hcSync;$('hc-diag').style.display='none';return true}
+  let ok=false;
+  try{const C=window.Capacitor;ok=!!hcPlugin()||(hcAndroid()&&C.isPluginAvailable&&C.isPluginAvailable('Health'))}catch(e){hcErr='初始化錯誤：'+e.message}
+  if(ok){$('hc-box').style.display='block';$('hc-btn').onclick=hcSync;$('hc-diag').style.display='none';return true}
   if(/Android/i.test(navigator.userAgent||'')){$('hc-diag').textContent=hcInfo();$('hc-diag').style.display='block'}
   return false;
 }
