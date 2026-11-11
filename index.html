@@ -175,7 +175,9 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <select id="theme"><option value="auto">跟隨系統</option><option value="light">淺色</option><option value="dark">深色</option></select>
     <label for="bkdays">備份提醒</label>
     <select id="bkdays"><option value="0">不提醒</option><option value="3">超過 3 天沒備份</option><option value="7">超過 7 天沒備份</option><option value="14">超過 14 天沒備份</option><option value="30">超過 30 天沒備份</option></select>
-    <p class="note">只有在這段時間內有新記錄、卻還沒備份時才會提醒。主題與提醒設定只存在這台裝置。</p>
+    <label for="askbk">修改記錄後</label>
+    <select id="askbk"><option value="1">詢問是否備份到 Google Drive</option><option value="0">不詢問</option></select>
+    <p class="note">備份提醒只有在這段時間內有新記錄、卻還沒備份時才會出現。已連線 Google Drive 且登入有效時，修改後會自動備份，不會再詢問。這些設定只存在這台裝置。</p>
   </div>
   <div class="card" id="omron-card">
     <b>匯入 Omron CSV</b>
@@ -191,6 +193,10 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <div class="note" id="om-sum" style="margin-top:8px;line-height:1.7"></div>
     <button id="om-go" style="display:none">確認匯入</button>
     <button id="om-undo" class="sec" style="display:none">復原上次匯入</button>
+    <div id="om-bk" class="card" style="display:none;margin:12px 0 0;border-color:var(--dose)">
+      <div id="om-bk-t" style="font-weight:600"></div>
+      <div class="row"><button id="om-bk-yes" style="margin-top:10px">備份到 Google Drive</button><button id="om-bk-no" class="sec" style="margin-top:10px">先不要</button></div>
+    </div>
   </div>
   <div class="card">
     <b>備份與還原</b>
@@ -246,6 +252,10 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 </details>
 </main>
 
+<div id="bk-ask" class="card" style="display:none;position:fixed;left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:20;margin:0 auto;max-width:496px;box-shadow:0 4px 18px rgba(0,0,0,.35);border-color:var(--dose)">
+  <div id="bk-ask-t" style="font-weight:600"></div>
+  <div class="row"><button id="bk-ask-yes" style="margin-top:10px">連線並備份</button><button id="bk-ask-no" class="sec" style="margin-top:10px">先不要</button></div>
+</div>
 <nav class="tabs">
   <button data-t="log" class="on">記錄</button>
   <button data-t="chart">圖表</button>
@@ -259,7 +269,7 @@ const ENV=location.pathname.includes('beta')?'-beta':'';
 const K='dosetrack-v1'+ENV;
 let S={entries:[],hl:120,h:0,tw:0,ts:0};
 try{const r=localStorage.getItem(K);if(r){const p=JSON.parse(r);if(p&&Array.isArray(p.entries))S={entries:p.entries,hl:Number(p.hl)||120,h:Number(p.h)||0,tw:Number(p.tw)||0,ts:Number(p.ts)||0}}}catch(e){}
-const save=()=>{S.ts=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}schedPush()};
+const save=()=>{S.ts=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}schedPush();try{askBkSoon()}catch(e){}};
 const $=id=>document.getElementById(id);
 const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
 function applyTheme(){const de=document.documentElement;if(!de||!de.setAttribute)return;const t=LS.get('dt-theme','auto');if(t==='light'||t==='dark')de.setAttribute('data-theme',t);else de.removeAttribute('data-theme')}
@@ -849,7 +859,7 @@ $('gd-main').onclick=importMain;
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.8';
+const APP_VERSION='1.9.10';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -864,6 +874,22 @@ async function checkUpdate(){
   }catch(e){}
 }
 $('cancel-edit').onclick=cancelEdit;
+let askTmr=null;
+function askBkSoon(){clearTimeout(askTmr);askTmr=setTimeout(askBk,700)}
+function askBk(){
+  try{
+    if(LS.get('dt-askbk','1')!=='1')return;
+    if($('om-bk').style.display==='block')return;
+    if(linked&&ready())return;
+    $('bk-ask-t').textContent=linked?'資料已更新，但 Google Drive 需要重新連線。要現在備份嗎？':'資料已更新。要備份到 Google Drive 嗎？';
+    $('bk-ask-yes').textContent=linked?'重新連線並備份':'連線並備份';
+    $('bk-ask').style.display='block';
+  }catch(e){}
+}
+$('bk-ask-yes').onclick=()=>{$('bk-ask').style.display='none';connect(true)};
+$('bk-ask-no').onclick=()=>{$('bk-ask').style.display='none'};
+$('askbk').value=LS.get('dt-askbk','1');
+$('askbk').onchange=()=>{LS.set('dt-askbk',$('askbk').value);if($('askbk').value!=='1')$('bk-ask').style.display='none'};
 $('theme').value=LS.get('dt-theme','auto');
 $('theme').onchange=()=>{LS.set('dt-theme',$('theme').value);applyTheme();if($('p-chart').classList.contains('on'))drawCharts()};
 $('bkdays').value=LS.get('dt-bkdays','7');
@@ -994,6 +1020,7 @@ function hcPlugin(){
 }
 function hcInfo(){try{const C=window.Capacitor;if(!C)return '診斷：找不到 Capacitor（目前是一般網頁，不是 APK 外殼，或外殼沒有注入橋接程式）。';return '診斷：Capacitor 存在；平台 '+(C.getPlatform?C.getPlatform():'?')+'；原生 '+(C.isNativePlatform?C.isNativePlatform():'?')+'；Health 外掛 '+(C.isPluginAvailable?C.isPluginAvailable('Health'):'?')+(hcErr?'；'+hcErr:'')+'。'}catch(e){return '診斷失敗：'+e.message}}
 function omShow(plan){
+  $('om-bk').style.display='none';
   const out=$('om-sum');out.textContent='';
   plan.info.forEach(st=>{
     const d=document.createElement('div');
@@ -1087,7 +1114,16 @@ $('om-go').onclick=()=>{
   $('om-go').style.display='none';$('om-file').value='';
   $('om-sum').textContent='已匯入 '+n+' 筆新記錄'+(m?'，並補充 '+m+' 筆既有體重的體組成數值':'')+'。匯入有誤可按「復原上次匯入」。';
   omUndoUI();
+  omAskBackup();
 };
+function omAskBackup(){
+  const t=$('om-bk-t'),yes=$('om-bk-yes'),no=$('om-bk-no');
+  if(linked&&ready()){t.textContent='正在自動備份到 Google Drive，請看畫面上方的同步狀態。';yes.style.display='none';no.textContent='知道了'}
+  else{t.textContent=linked?'Google Drive 需要重新連線。要現在重新連線並備份嗎？':'要把這些資料備份到 Google Drive 嗎？';yes.style.display='';yes.textContent=linked?'重新連線並備份':'連線並備份到 Google Drive';no.textContent='先不要'}
+  $('om-bk').style.display='block';
+}
+$('om-bk-yes').onclick=()=>{$('om-bk').style.display='none';connect(true)};
+$('om-bk-no').onclick=()=>{$('om-bk').style.display='none'};
 $('om-undo').onclick=()=>{
   try{
     const raw=localStorage.getItem(K+'-undo');if(!raw)return;
