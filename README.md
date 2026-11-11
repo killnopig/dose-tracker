@@ -23,6 +23,17 @@
 
 請固定使用同一種方式開啟，因為資料是依瀏覽器各自儲存的（見下節）。
 
+## Android APK（選用）
+
+除了「加到主畫面」，也可以安裝 Android APK：到 [Releases](https://github.com/killnopig/dose-tracker/releases) 下載最新的 `dose-tracker-v1.0.0.apk`。
+
+- APK 只是載入 `https://killnopig.github.io/dose-tracker/` 的外殼（Capacitor）。網站更新時 app 內容會自動跟著更新，不需要重新安裝；實際版本以 app 最底下顯示的版本號為準。
+- 需要網路才能開啟，沒有網路時無法載入。
+- 資料存在 APK 內嵌的瀏覽器，與 Chrome 網頁版分開。解除安裝或清除 app 資料會遺失記錄，請定期在「設定」按「產生備份文字」另存。
+- Google Drive 備份在作者的手機上測試可正常使用，其他機型未測。
+- 從 Chrome 網頁版換到 APK：在網頁版「產生備份文字」，到 APK「從文字還原」；或兩邊連線同一個 Google 帳號，由 Drive 載入。
+- 此版本使用 debug 簽章，僅供個人側載。安裝時需允許「安裝未知應用程式」。之後更新 APK 必須使用同一把簽章金鑰，否則要先解除安裝，記錄會一併消失。
+
 ## 資料存在哪裡
 
 - 預設存在你自己手機瀏覽器的本機儲存空間（localStorage），**不會上傳到本專案或作者的任何伺服器**。
