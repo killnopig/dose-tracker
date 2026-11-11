@@ -35,6 +35,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 .tabs button.on{color:var(--tx);box-shadow:inset 0 3px 0 var(--dose)}
 .pane{display:none}.pane.on{display:block}
 .cv{position:relative;height:250px}
+.cv canvas{touch-action:pan-y}
 .note{font-size:13px;color:var(--mu)}
 .empty{color:var(--mu);text-align:center;padding:18px 0}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
@@ -336,15 +337,15 @@ function chartSpecs(pal){
   const ln3=(label,data,color,extra)=>Object.assign({label,data,borderColor:color,backgroundColor:color,tension:.25,pointRadius:data.length>80?1.5:3,spanGaps:true},extra||{});
   const sp=[];
   if(ws.length){
-    sp.push({id:'cv-w',title:'體重 (kg)',cfg:{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[ln3('體重 (kg)',ws.map(e=>e.wt),wc)].concat(S.tw>0?[{label:'目標 '+S.tw+' kg',data:ws.map(()=>S.tw),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]:[])},
+    sp.push({id:'cv-w',title:'體重 (kg)',dates:ws.map(e=>e.date),extra:i=>{const x=[];if(S.h>0)x.push('BMI '+(ws[i].wt/((S.h/100)*(S.h/100))).toFixed(1));if(omTime(ws[i]))x.push('時間 '+omTime(ws[i]));return x},cfg:{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[ln3('體重 (kg)',ws.map(e=>e.wt),wc)].concat(S.tw>0?[{label:'目標 '+S.tw+' kg',data:ws.map(()=>S.tw),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]:[])},
       options:{maintainAspectRatio:false,plugins:{legend:{display:S.tw>0,labels:leg().labels}},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}}});
   }
   if(ds.length){
-    const labels=[],doses=[],ob=[];
+    const labels=[],doses=[],ob=[],dts=[];
     const a=dn(ds[0].date),b=Math.max(dn(today()),dn(ds[ds.length-1].date))+7;
     const dm={};ds.forEach(e=>{dm[e.date]=(dm[e.date]||0)+e.dose});
-    for(let i=a;i<=b;i++){const s2=fromDn(i);labels.push(md(s2));doses.push(dm[s2]||null);ob.push(+onBoard(i).toFixed(2))}
-    sp.push({id:'cv-d',title:'注射劑量與預估體內殘留 (mg)',cfg:{data:{labels,datasets:[
+    for(let i=a;i<=b;i++){const s2=fromDn(i);labels.push(md(s2));dts.push(s2);doses.push(dm[s2]||null);ob.push(+onBoard(i).toFixed(2))}
+    sp.push({id:'cv-d',title:'注射劑量與預估體內殘留 (mg)',dates:dts,extra:i=>ds.filter(e=>e.date===dts[i]).map(e=>'注射 '+e.dose+' mg'+(e.site?'（'+e.site+'）':'')),cfg:{data:{labels,datasets:[
       {type:'bar',label:'注射劑量 (mg)',data:doses,backgroundColor:dc,order:2},
       {type:'line',label:'預估殘留 (mg)',data:ob,borderColor:wc,backgroundColor:wc,pointRadius:0,tension:.3,order:1}]},
       options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid(),beginAtZero:true}}}}});
@@ -352,12 +353,12 @@ function chartSpecs(pal){
   if(bs.length){
     const ds3=[ln3('收縮壓',bs.map(e=>e.sys),c3),ln3('舒張壓',bs.map(e=>e.dia),c4)];
     if(bs.some(e=>e.pul>0))ds3.push(ln3('脈搏',bs.map(e=>e.pul>0?e.pul:null),mu,{borderDash:[4,3],pointRadius:2}));
-    sp.push({id:'cv-bp',title:'血壓與脈搏',cfg:{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},
+    sp.push({id:'cv-bp',title:'血壓與脈搏',dates:bs.map(e=>e.date),extra:i=>[omTime(bs[i])?'時間 '+omTime(bs[i]):'',(bs[i].note||'').replace(/^\d{1,2}:\d{2}[，,]?/,'')].filter(Boolean),cfg:{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},
       options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}}});
   }
   if(hb){
     const m2=(S.h/100)*(S.h/100);
-    sp.push({id:'cv-bmi',title:'BMI（身高 '+S.h+' cm，虛線為 24 與 27 界線）',cfg:{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[
+    sp.push({id:'cv-bmi',title:'BMI（身高 '+S.h+' cm，虛線為 24 與 27 界線）',dates:ws.map(e=>e.date),extra:i=>['體重 '+ws[i].wt+' kg'],cfg:{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[
       ln3('BMI',ws.map(e=>+(e.wt/m2).toFixed(1)),wc),
       {label:'過重 24',data:ws.map(()=>24),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1,pointRadius:0},
       {label:'肥胖 27',data:ws.map(()=>27),borderColor:mu,backgroundColor:mu,borderDash:[2,3],borderWidth:1,pointRadius:0}]},
@@ -368,7 +369,7 @@ function chartSpecs(pal){
     const d2=[];
     if(hg)d2.push(ln3('身體年齡（歲）',bm.map(e=>e.bage>0?e.bage:null),c3,{yAxisID:'y'}));
     if(hr)d2.push(ln3('基礎代謝 (kcal)',bm.map(e=>e.bmr>0?e.bmr:null),c4,{yAxisID:'y1'}));
-    sp.push({id:'cv-bm',title:'身體年齡與基礎代謝',cfg:{type:'line',data:{labels:bm.map(e=>md(e.date)),datasets:d2},
+    sp.push({id:'cv-bm',title:'身體年齡與基礎代謝',dates:bm.map(e=>e.date),cfg:{type:'line',data:{labels:bm.map(e=>md(e.date)),datasets:d2},
       options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid(),display:hg,position:'left'},y1:{display:hr,position:'right',grid:{drawOnChartArea:false}}}}}});
   }
   if(bc.length){
@@ -378,9 +379,25 @@ function chartSpecs(pal){
     if(hm)dsb.push(ln3('骨骼肌率 (%)',bc.map(e=>e.mus>0?e.mus:null),c4,{yAxisID:'y'}));
     if(hv)dsb.push(ln3('內臟脂肪等級',bc.map(e=>e.vis>0?e.vis:null),wc,{yAxisID:'y1'}));
     const sc={x:{grid:grid(),ticks:tk()},y:{grid:grid(),display:hf||hm,position:'left'},y1:{display:hv,position:'right',grid:{drawOnChartArea:false}}};
-    sp.push({id:'cv-bc',title:'體脂、骨骼肌與內臟脂肪',cfg:{type:'line',data:{labels:bc.map(e=>md(e.date)),datasets:dsb},options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:sc}}});
+    sp.push({id:'cv-bc',title:'體脂、骨骼肌與內臟脂肪',dates:bc.map(e=>e.date),cfg:{type:'line',data:{labels:bc.map(e=>md(e.date)),datasets:dsb},options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:sc}}});
   }
   return sp;
+}
+const WD='日一二三四五六';
+const fullDate=d=>d?d+'（週'+WD[new Date(dn(d)*864e5).getUTCDay()]+'）':'';
+const crosshair=color=>({id:'crosshair',afterDatasetsDraw(c){
+  const t=c.tooltip;if(!t||!t.getActiveElements)return;
+  const a=t.getActiveElements();if(!a.length)return;
+  const x=a[0].element.x,ar=c.chartArea,g=c.ctx;
+  g.save();g.beginPath();g.moveTo(x,ar.top);g.lineTo(x,ar.bottom);g.lineWidth=1;g.strokeStyle=color;g.setLineDash([4,3]);g.stroke();g.restore();
+}});
+function addHover(sp,pal){
+  const o=sp.cfg.options;
+  o.interaction={mode:'index',intersect:false,axis:'x'};
+  o.plugins=o.plugins||{};
+  o.plugins.tooltip={mode:'index',intersect:false,padding:10,titleFont:{size:13},bodyFont:{size:13},footerFont:{size:12,weight:'normal'},filter:it=>!/^(過重|肥胖) /.test(it.dataset.label||''),
+    callbacks:{title:it=>it.length&&sp.dates?fullDate(sp.dates[it[0].dataIndex]):'',footer:it=>it.length&&sp.extra?sp.extra(it[0].dataIndex):[]}};
+  sp.cfg.plugins=[crosshair(pal.mu)];
 }
 function drawCharts(){
   document.querySelectorAll('.cerr').forEach(n=>n.remove());
@@ -402,7 +419,7 @@ function drawCharts(){
   sh('card-bmi',hb);sh('card-bm',bm.length>0);
   const any=!!(ws.length||ds.length||bs.length||bc.length||bm.length);
   sh('chart-empty',!any);sh('exp-card',any);
-  chartSpecs(pal).forEach(sp=>live.push(mk(sp.id,sp.cfg)));
+  chartSpecs(pal).forEach(sp=>{addHover(sp,pal);live.push(mk(sp.id,sp.cfg))});
 }
 
 /* ---------- 圖表截圖：所有圖表合成一張高解析度圖片 ---------- */
@@ -696,7 +713,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.7.0';
+const APP_VERSION='1.8.0';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
