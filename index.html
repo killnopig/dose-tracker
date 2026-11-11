@@ -179,6 +179,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
       <label style="display:flex;gap:8px;align-items:center;margin:8px 0 0;color:var(--mu)"><input type="checkbox" id="hc-all" style="width:auto">包含所有來源（預設只取 Omron）</label>
       <button id="hc-btn" class="sec">授權並讀取 Health Connect</button>
     </div>
+    <div class="note" id="hc-diag" style="display:none;margin-top:8px"></div>
     <div class="note" id="om-sum" style="margin-top:8px;line-height:1.7"></div>
     <button id="om-go" style="display:none">確認匯入</button>
     <button id="om-undo" class="sec" style="display:none">復原上次匯入</button>
@@ -778,7 +779,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.3';
+const APP_VERSION='1.9.4';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -907,7 +908,8 @@ function omApply(plan){
 function omUndoUI(){try{$('om-undo').style.display=localStorage.getItem(K+'-undo')?'block':'none'}catch(e){}}
 let omPlanData=null;
 /* ---------- Health Connect（僅 Android APK，需要原生外掛） ---------- */
-const hcPlugin=()=>{try{return window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()&&Capacitor.registerPlugin?Capacitor.registerPlugin('Health'):null}catch(e){return null}};
+const hcPlugin=()=>{try{const C=window.Capacitor;if(!C||!C.registerPlugin)return null;const nat=C.isNativePlatform?C.isNativePlatform():(C.getPlatform?C.getPlatform()!=='web':false);return nat?C.registerPlugin('Health'):null}catch(e){return null}};
+function hcInfo(){try{const C=window.Capacitor;if(!C)return '診斷：找不到 Capacitor（目前是一般網頁，不是 APK 外殼，或外殼沒有注入橋接程式）。';return '診斷：Capacitor 存在；平台 '+(C.getPlatform?C.getPlatform():'?')+'；原生 '+(C.isNativePlatform?C.isNativePlatform():'?')+'；Health 外掛 '+(C.isPluginAvailable?C.isPluginAvailable('Health'):'?')+'。'}catch(e){return '診斷失敗：'+e.message}}
 function omShow(plan){
   const out=$('om-sum');out.textContent='';
   plan.info.forEach(st=>{
@@ -971,7 +973,12 @@ async function hcSync(){
     line('骨骼肌、內臟脂肪、身體年齡不在 Health Connect 中，請另外匯入 Omron CSV。');
   }catch(e){out.textContent='Health Connect 同步失敗：'+(e&&e.message?e.message:e)+'。如果訊息提到外掛未實作，代表這個 APK 尚未包含 Health Connect 外掛，請依 README 重新建置。'}
 }
-if(hcPlugin()){$('hc-box').style.display='block';$('hc-btn').onclick=hcSync}
+function hcInit(){
+  if(hcPlugin()){$('hc-box').style.display='block';$('hc-btn').onclick=hcSync;$('hc-diag').style.display='none';return true}
+  if(/Android/i.test(navigator.userAgent||'')){$('hc-diag').textContent=hcInfo();$('hc-diag').style.display='block'}
+  return false;
+}
+if(!hcInit()){window.addEventListener('load',()=>{hcInit()||setTimeout(hcInit,1500)})}
 $('om-file').onchange=async ev=>{
   const files=[...(ev.target.files||[])];
   $('om-sum').textContent='';omPlanData=null;$('om-go').style.display='none';
