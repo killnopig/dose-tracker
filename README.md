@@ -51,7 +51,7 @@
 1. 安裝外掛。外掛的主版本要和 Capacitor 相同，先用 `npx cap --version` 查看：
    ```bash
    cd ~/Desktop/dose-tracker-app
-   npm install @capgo/capacitor-health
+   npm install @capgo/capacitor-health @capacitor/share @capacitor/filesystem
    npx cap sync android
    ```
 2. 編輯 `android/app/src/main/AndroidManifest.xml`，在 `<manifest>` 裡、`<application>` 之外加入：
@@ -198,6 +198,12 @@
 - 發布新版時，記得先把 `APP_VERSION` 改成新版號，再上傳 `index.html`，否則使用者不會收到更新提示。
 
 ## 版本紀錄
+
+### 1.9.8（2026-11-11）
+- 記錄列表可排序（新到舊、舊到新）、依類型篩選（注射、體重、血壓、體組成）、依月份跳轉，並顯示符合筆數；「顯示更多」旁新增「全部顯示」。排序與類型選擇會記住。
+
+### 1.9.7（2026-11-11）
+- APK 內的圖表截圖改用 Android 系統分享選單（需要 @capacitor/share 與 @capacitor/filesystem 外掛，見〈重新建置 APK〉）；APK 內不再顯示無效的「下載 PNG」「複製圖片」。網頁版不變。
 
 ### 1.9.6（2026-11-11）
 - 測試版新增「匯入正式版資料」：從你 Drive 裡正式版的備份檔複製一份到測試版，不會改動正式版備份。

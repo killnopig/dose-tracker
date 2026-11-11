@@ -111,6 +111,12 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <button id="cancel-edit" class="sec" style="display:none">取消編輯</button>
     <div class="note" id="msg" style="margin-top:8px"></div>
   </div>
+  <div class="card" id="list-ctl"><b>記錄列表</b>
+    <div class="seg" id="seg-lsort"></div>
+    <div class="seg" id="seg-ltype"></div>
+    <select id="l-mon" aria-label="月份"></select>
+    <div class="note" id="l-cnt" style="margin-top:8px"></div>
+  </div>
   <div class="card" id="list"></div>
 </section>
 
@@ -268,7 +274,8 @@ const onBoard=(day)=>{const k=Math.LN2/(S.hl/24);let t=0;for(const e of S.entrie
 let RANGE=LS.get('dt-range','all'),BPV=LS.get('dt-bpv','all');
 const rangeCut=()=>RANGE==='all'?'':fromDn(dn(today())-(+RANGE)+1);
 const inR=e=>{const c=rangeCut();return !c||e.date>=c};
-function seg(id,opts,get,set){const c=$(id);c.textContent='';opts.forEach(([v,t])=>{const b=document.createElement('button');b.textContent=t;if(get()===v)b.className='on';b.onclick=()=>{set(v);seg(id,opts,get,set);drawCharts()};c.appendChild(b)})}
+function seg(id,opts,get,set,after){const c=$(id);c.textContent='';opts.forEach(([v,t])=>{const b=document.createElement('button');b.textContent=t;if(get()===v)b.className='on';b.onclick=()=>{set(v);seg(id,opts,get,set,after);(after||drawCharts)()};c.appendChild(b)})}
+let LSORT=LS.get('dt-lsort','desc'),LTYPE=LS.get('dt-ltype','all'),LMON='';
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let cw=null,cd=null;
 let editId=null,moreTouched=false,listLim=30;
@@ -328,7 +335,23 @@ function render(){
   if(!moreTouched&&es.some(e=>e.sys>0||e.pul>0||e.fat>0||e.mus>0||e.vis>0||e.bage>0||e.bmr>0))$('f-more').open=true;
   const L=$('list');L.textContent='';
   if(!es.length){const d=document.createElement('div');d.className='empty';d.textContent='還沒有記錄，先新增第一筆吧。';L.appendChild(d)}
-  es.slice().reverse().slice(0,listLim).forEach(e=>{
+  sh('list-ctl',es.length>0);
+  const ms=[...new Set(es.map(e=>e.date.slice(0,7)))].reverse();
+  if(!ms.includes(LMON))LMON='';
+  const sel=$('l-mon');sel.textContent='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='全部月份';sel.appendChild(o0);
+  ms.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m.replace('-','年')+'月';sel.appendChild(o)});
+  sel.value=LMON;
+  sel.onchange=()=>{LMON=sel.value;listLim=30;render()};
+  const lre=()=>{listLim=30;render()};
+  seg('seg-lsort',[['desc','新到舊'],['asc','舊到新']],()=>LSORT,v=>{LSORT=v;LS.set('dt-lsort',v)},lre);
+  seg('seg-ltype',[['all','全部'],['dose','注射'],['wt','體重'],['bp','血壓'],['bc','體組成']],()=>LTYPE,v=>{LTYPE=v;LS.set('dt-ltype',v)},lre);
+  const lmatch=e=>LTYPE==='all'||(LTYPE==='dose'&&e.dose>0)||(LTYPE==='wt'&&e.wt>0)||(LTYPE==='bp'&&(e.sys>0||e.pul>0))||(LTYPE==='bc'&&(e.fat>0||e.mus>0||e.vis>0||e.bage>0||e.bmr>0));
+  const rows=es.filter(e=>lmatch(e)&&(!LMON||e.date.slice(0,7)===LMON));
+  if(LSORT==='desc')rows.reverse();
+  $('l-cnt').textContent='符合 '+rows.length+' 筆，共 '+es.length+' 筆記錄';
+  if(es.length&&!rows.length){const d=document.createElement('div');d.className='empty';d.textContent='沒有符合條件的記錄。';L.appendChild(d)}
+  rows.slice(0,listLim).forEach(e=>{
     const it=document.createElement('div');it.className='item';
     const l=document.createElement('div');
     const a=document.createElement('div');a.textContent=e.date;
@@ -355,7 +378,7 @@ function render(){
     it.appendChild(l);it.appendChild(bx);L.appendChild(it);
   });
   updBk();
-  if(es.length>listLim){const mb=document.createElement('button');mb.className='sec';mb.textContent='顯示更多（還有 '+(es.length-listLim)+' 筆）';mb.onclick=()=>{listLim+=50;render()};L.appendChild(mb)}
+  if(rows.length>listLim){const mb=document.createElement('button');mb.className='sec';mb.textContent='顯示更多（還有 '+(rows.length-listLim)+' 筆）';mb.onclick=()=>{listLim+=50;render()};L.appendChild(mb);const ma=document.createElement('button');ma.className='sec';ma.textContent='全部顯示';ma.onclick=()=>{listLim=1e9;render()};L.appendChild(ma)}
 }
 
 let live=[];
@@ -543,6 +566,7 @@ async function exportCharts(){
   expUrl=URL.createObjectURL(blob);
   $('exp-img').src=expUrl;$('exp-out').style.display='block';
   msg('已產生 '+W+' × '+H+' 像素的圖片。可分享給 AI 或下載。');
+  adaptExport();
 }
 
 /* ---------- 數據摘要（純文字，給 AI 搭配圖片分析） ---------- */
@@ -680,13 +704,35 @@ $('sum-btn').onclick=async()=>{
   }
 };
 $('exp-btn').onclick=()=>{exportCharts().catch(e=>{$('exp-msg').textContent='產生截圖失敗：'+(e&&e.message?e.message:e)})};
+function capPlugin(n){try{const C=window.Capacitor;if(!C||!hcAndroid())return null;if(C.Plugins&&C.Plugins[n])return C.Plugins[n];if(C.isPluginAvailable&&C.isPluginAvailable(n)&&C.registerPlugin)return C.registerPlugin(n)}catch(e){}return null}
+const nativeShareOK=()=>!!(capPlugin('Share')&&capPlugin('Filesystem'));
+function adaptExport(){
+  if(!hcAndroid())return;
+  $('exp-dl').style.display='none';$('exp-copy').style.display='none';
+  $('exp-share').textContent='分享或儲存圖片（開啟系統選單）';
+  if(!nativeShareOK())$('exp-msg').textContent='這個 APK 還沒有分享外掛，無法分享或儲存圖片。請依 README 的〈重新建置 APK〉安裝 @capacitor/share 與 @capacitor/filesystem 後重新打包。';
+}
+async function shareNative(){
+  const F=capPlugin('Filesystem'),Sh=capPlugin('Share');
+  const b64=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=()=>no(r.error||new Error('讀取圖片失敗'));r.readAsDataURL(expBlob)});
+  await F.writeFile({path:expName,data:b64,directory:'CACHE'});
+  const u=await F.getUri({path:expName,directory:'CACHE'});
+  await Sh.share({title:'注射與體重記錄：圖表',files:[u.uri],dialogTitle:'分享或儲存圖表'});
+}
 $('exp-share').onclick=async()=>{
   if(!expBlob)return;
   try{
+    if(hcAndroid()){
+      if(!nativeShareOK()){adaptExport();return}
+      await shareNative();$('exp-msg').textContent='已開啟系統分享選單，可選「儲存」或直接傳給 AI App。';return;
+    }
     const file=new File([expBlob],expName,{type:'image/png'});
     if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'注射與體重記錄：圖表'});return}
     $('exp-msg').textContent='這個瀏覽器不支援直接分享，請改用「下載 PNG」，或長按圖片儲存。';
-  }catch(e){if(!(e&&e.name==='AbortError'))$('exp-msg').textContent='分享失敗，請改用「下載 PNG」。'}
+  }catch(e){
+    const msg=e&&e.message?e.message:String(e);
+    if(!(e&&e.name==='AbortError')&&!/cancel/i.test(msg))$('exp-msg').textContent='分享失敗：'+msg;
+  }
 };
 $('exp-dl').onclick=()=>{
   if(!expBlob)return;
@@ -803,7 +849,7 @@ $('gd-main').onclick=importMain;
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.6';
+const APP_VERSION='1.9.8';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
