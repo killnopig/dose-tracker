@@ -146,6 +146,8 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <p class="note">登入你自己的 Google 帳號後，資料會備份到你 Drive 裡的隱藏應用程式資料夾，只有這個網頁能讀寫，作者看不到你的資料。</p>
     <button id="gd-btn">連線 Google Drive</button>
     <button id="gd-off" class="sec" style="display:none">中斷連線</button>
+    <button id="gd-main" class="sec" style="display:none">匯入正式版資料（測試版專用）</button>
+    <div class="note" id="gd-main-msg" style="display:none;margin-top:8px"></div>
   </div>
   <div class="card">
     <div class="row">
@@ -713,6 +715,7 @@ const ready=()=>tok&&Date.now()<tokExp-60000;
 function updUI(){
   $('gd-btn').textContent=linked?(ready()?'立即同步':'重新連線 Google Drive'):'連線 Google Drive';
   $('gd-off').style.display=linked?'block':'none';
+  $('gd-main').style.display=ENV?'block':'none';
 }
 async function gfetch(url,opt){
   opt=opt||{};
@@ -776,10 +779,31 @@ $('gd-off').onclick=()=>{
   tok=null;linked=false;fid=null;try{localStorage.removeItem('dt-linked'+ENV)}catch(e){}
   setSync('本機儲存（已中斷 Google Drive）');updUI();
 };
+async function importMain(){
+  const b=$('gd-main'),m=$('gd-main-msg');m.style.display='block';
+  if(!ready()){m.textContent='請先連線 Google Drive（上面的按鈕），再按這個。';return}
+  if(!b.dataset.c){b.dataset.c=1;b.textContent='會取代目前測試版資料，再按一次確認';m.textContent='';setTimeout(()=>{b.dataset.c='';b.textContent='匯入正式版資料（測試版專用）'},4000);return}
+  b.dataset.c='';b.textContent='匯入中…';m.textContent='';
+  try{
+    const r=await gfetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&q='+encodeURIComponent("name='dose-tracker.json'"));
+    const j=await r.json(),id=j.files&&j.files[0]&&j.files[0].id;
+    if(!id){m.textContent='在你的 Drive 找不到正式版備份檔（dose-tracker.json）。請先在正式版連線並同步一次。';return}
+    const d=await (await gfetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media')).json();
+    if(!d||!Array.isArray(d.entries))throw new Error('備份格式不符');
+    S={entries:d.entries,hl:Number(d.hl)||120,h:Number(d.h)||0,tw:Number(d.tw)||0,ts:Date.now()};
+    save();
+    $('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();
+    if($('p-chart').classList.contains('on'))drawCharts();
+    const nd=S.entries.filter(e=>e.dose>0).length;
+    m.textContent='已匯入 '+S.entries.length+' 筆記錄（其中注射 '+nd+' 次）。這是複製，正式版的備份不受影響。';
+  }catch(e){m.textContent='匯入失敗：'+(e&&e.message?e.message:e)+'。若顯示 auth，請重新連線後再試。'}
+  finally{b.textContent='匯入正式版資料（測試版專用）'}
+}
+$('gd-main').onclick=importMain;
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.5';
+const APP_VERSION='1.9.6';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
