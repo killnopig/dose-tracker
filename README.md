@@ -23,6 +23,54 @@
 
 請固定使用同一種方式開啟，因為資料是依瀏覽器各自儲存的（見下節）。
 
+## Android APK（選用）
+
+除了「加到主畫面」，也可以安裝 Android APK：到 [Releases](https://github.com/killnopig/dose-tracker/releases) 下載最新的 `dose-tracker-v1.0.0.apk`。
+
+- APK 只是載入 `https://killnopig.github.io/dose-tracker/` 的外殼（Capacitor）。網站更新時 app 內容會自動跟著更新，不需要重新安裝；實際版本以 app 最底下顯示的版本號為準。
+- 需要網路才能開啟，沒有網路時無法載入。
+- 資料存在 APK 內嵌的瀏覽器，與 Chrome 網頁版分開。解除安裝或清除 app 資料會遺失記錄，請定期在「設定」按「產生備份文字」另存。
+- Google Drive 備份在作者的手機上測試可正常使用，其他機型未測。
+- 從 Chrome 網頁版換到 APK：在網頁版「產生備份文字」，到 APK「從文字還原」；或兩邊連線同一個 Google 帳號，由 Drive 載入。
+- 此版本使用 debug 簽章，僅供個人側載。安裝時需允許「安裝未知應用程式」。之後更新 APK 必須使用同一把簽章金鑰，否則要先解除安裝，記錄會一併消失。
+
+## Health Connect 同步（Android APK）
+
+只有在 APK 內才會出現。網頁版沒有這個功能，因為 Health Connect 只開放給 Android 原生 app。
+
+- 「設定」→「匯入 Omron CSV」卡片中會多一個「從 Health Connect 同步」，可選最近 30 天、90 天或 1 年。
+- 預設只取來源名稱含 Omron 的資料；勾選「包含所有來源」才會取其他 app 寫入的資料。
+- 能讀到：血壓、脈搏、體重、體脂率、基礎代謝。**讀不到：骨骼肌率、內臟脂肪、身體年齡**，請繼續用 Omron CSV 匯入；體重相同的記錄會自動補上這些欄位。
+- 預覽後按「確認匯入」才會寫入，可按「復原上次匯入」。與 CSV 已匯入的資料不會重複。
+- 超過 30 天前的資料需要 Health Connect 的歷史讀取權限，部分舊版 Health Connect 不支援。
+
+### 重新建置 APK（在 Mac 上）
+
+專案資料夾以 `~/Desktop/dose-tracker-app` 為例。
+
+1. 安裝外掛。外掛的主版本要和 Capacitor 相同，先用 `npx cap --version` 查看：
+   ```bash
+   cd ~/Desktop/dose-tracker-app
+   npm install @capgo/capacitor-health
+   npx cap sync android
+   ```
+2. 編輯 `android/app/src/main/AndroidManifest.xml`，在 `<manifest>` 裡、`<application>` 之外加入：
+   ```xml
+   <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+   <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+   <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE" />
+   <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+   ```
+   外掛本身只預先宣告體重、心率等基本項目，血壓、體脂、基礎代謝要自己加。
+3. 編輯 `android/app/src/main/res/values/strings.xml`，在 `<resources>` 裡加入隱私權政策連結（Health Connect 授權畫面會用到）：
+   ```xml
+   <string name="health_connect_privacy_policy_url">https://killnopig.github.io/dose-tracker/privacy.html</string>
+   ```
+4. 如果編譯時出現 minSdk 相關錯誤，把 `android/variables.gradle` 的 `minSdkVersion` 改成 26 以上。
+5. 把 `android/app/build.gradle` 的 `versionCode` 加 1、`versionName` 改成新版本，才能覆蓋安裝舊版。
+6. 用 Android Studio 開啟（`npx cap open android`），Build → Build APK(s)。使用同一台 Mac 的預設 debug 金鑰，簽章不變，可直接覆蓋安裝，記錄不會消失。
+7. 安裝後第一次按「授權並讀取 Health Connect」，在系統畫面勾選全部項目。
+
 ## 資料存在哪裡
 
 - 預設存在你自己手機瀏覽器的本機儲存空間（localStorage），**不會上傳到本專案或作者的任何伺服器**。
@@ -122,7 +170,7 @@
 ## 已知限制
 
 - 沒有推播通知，提醒只有在打開 app 時才看得到。想要鬧鐘式提醒，請另外在手機時鐘或行事曆設定。
-- 無法串接 Google Health Connect。Health Connect 只開放給 Android 原生 app，網頁無法存取。
+- 網頁版無法串接 Google Health Connect，只有 Android APK 可以（見上方〈Health Connect 同步〉）。
 - 沒有離線模式：首次載入圖表函式庫需要網路。
 - Google Drive 備份使用的存取權杖約 1 小時後過期。過期後 app 仍可正常記錄，但要點頁面上方的狀態行或「設定」裡的按鈕重新連線，才會繼續同步。
 - 注射部位的輪替順序固定，無法自訂。
@@ -150,6 +198,10 @@
 - 發布新版時，記得先把 `APP_VERSION` 改成新版號，再上傳 `index.html`，否則使用者不會收到更新提示。
 
 ## 版本紀錄
+
+### 1.7.0（2026-11-11）
+- 新增「從 Health Connect 同步」（僅 Android APK 中顯示）：讀取 Omron 寫入的血壓、脈搏、體重、體脂、基礎代謝，沿用 Omron CSV 的重複判斷與預覽，並可復原。
+- 血壓的重複判斷不再比對脈搏，量測時間相差 2 分鐘內視為同一筆，避免 CSV 與 Health Connect 重複匯入。
 
 ### 1.6.1（2026-11-10）
 - 圖表頁新增「複製數據摘要」：產生純文字摘要（注射歷程、體重、血壓、體組成、每週與近 14 天逐日），可選擇在開頭加入給 AI 的分析提示。

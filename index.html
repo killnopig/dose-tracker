@@ -149,6 +149,12 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <b>匯入 Omron CSV</b>
     <p class="note">選擇 OMRON connect 匯出的血壓、體重、體組成 CSV，可一次選多個檔案，分開匯出的也能分開匯入。先預覽再確認，重複的資料不會重複加入，並保留一份可復原的備份。</p>
     <input type="file" id="om-file" accept=".csv,.tsv,.txt,text/csv" multiple>
+    <div id="hc-box" style="display:none;margin-top:12px">
+      <b>從 Health Connect 同步（僅 Android APK）</b>
+      <select id="hc-days" style="margin-top:6px"><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="365">最近 1 年（需歷史權限）</option></select>
+      <label style="display:flex;gap:8px;align-items:center;margin:8px 0 0;color:var(--mu)"><input type="checkbox" id="hc-all" style="width:auto">包含所有來源（預設只取 Omron）</label>
+      <button id="hc-btn" class="sec">授權並讀取 Health Connect</button>
+    </div>
     <div class="note" id="om-sum" style="margin-top:8px;line-height:1.7"></div>
     <button id="om-go" style="display:none">確認匯入</button>
     <button id="om-undo" class="sec" style="display:none">復原上次匯入</button>
@@ -690,7 +696,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.6.1';
+const APP_VERSION='1.7.0';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -754,9 +760,32 @@ function omRecord(h,hdr,r){
   return rec;
 }
 const omTime=e=>{const m=(e.note||'').match(/^(\d{1,2}):(\d{2})/);return m?pad(+m[1])+':'+m[2]:''};
-const omKey=e=>[e.date,+e.sys||0,+e.dia||0,+e.pul||0,+e.wt||0,+e.fat||0,+e.mus||0,+e.vis||0,+e.bage||0,+e.bmr||0,omTime(e)].join('|');
+const omKey=e=>(+e.sys>0&&+e.dia>0)?[e.date,'bp',+e.sys,+e.dia,omTime(e)].join('|'):[e.date,+e.sys||0,+e.dia||0,+e.pul||0,+e.wt||0,+e.fat||0,+e.mus||0,+e.vis||0,+e.bage||0,+e.bmr||0,omTime(e)].join('|');
+const omMin=t=>t?+t.slice(0,2)*60+ +t.slice(3,5):-1;
+function omPlanRec(rec,st,ctx){
+  if(!st.from||rec.date<st.from)st.from=rec.date;
+  if(!st.to||rec.date>st.to)st.to=rec.date;
+  const k=omKey(rec);
+  if(ctx.seen.has(k)){st.dup++;return}
+  if(rec.sys>0){
+    const tm=omMin(omTime(rec));
+    if(tm>=0&&S.entries.some(e=>e.date===rec.date&&e.sys===rec.sys&&e.dia===rec.dia&&omMin(omTime(e))>=0&&Math.abs(omMin(omTime(e))-tm)<=2)){ctx.seen.add(k);st.dup++;return}
+  }else if(!(rec.wt>0)&&(rec.fat>0||rec.bmr>0)){
+    if(S.entries.some(e=>e.date===rec.date&&((rec.fat>0&&Math.abs((e.fat||0)-rec.fat)<0.05)||(rec.bmr>0&&e.bmr===rec.bmr)))){ctx.seen.add(k);st.dup++;return}
+  }
+  if(!(rec.sys>0)&&rec.wt>0){
+    const ex=S.entries.find(e=>e.date===rec.date&&e.wt>0&&Math.abs(e.wt-rec.wt)<0.05&&!(e.sys>0));
+    if(ex){
+      const fill={};['fat','mus','vis','bage','bmr'].forEach(q=>{if(!(ex[q]>0)&&rec[q]>0)fill[q]=rec[q]});
+      ctx.seen.add(k);
+      if(Object.keys(fill).length){ctx.merges.push({id:ex.id,fill});st.merged++}else st.dup++;
+      return;
+    }
+  }
+  ctx.seen.add(k);ctx.toAdd.push(rec);st.added++;
+}
 async function omBuild(files){
-  const seen=new Set(S.entries.map(omKey)),toAdd=[],merges=[],info=[];
+  const seen=new Set(S.entries.map(omKey)),toAdd=[],merges=[],info=[],ctx={seen,toAdd,merges};
   for(const f of files){
     const st={name:f.name,type:'',added:0,merged:0,dup:0,skipped:0,from:'',to:'',err:''};
     const rows=parseCSV(await f.text());
@@ -768,20 +797,7 @@ async function omBuild(files){
     for(const r of rows.slice(1)){
       const rec=omRecord(h,hdr,r);
       if(!rec){st.skipped++;continue}
-      if(!st.from||rec.date<st.from)st.from=rec.date;
-      if(!st.to||rec.date>st.to)st.to=rec.date;
-      const k=omKey(rec);
-      if(seen.has(k)){st.dup++;continue}
-      if(!(rec.sys>0)&&rec.wt>0){
-        const ex=S.entries.find(e=>e.date===rec.date&&e.wt>0&&Math.abs(e.wt-rec.wt)<0.05&&!(e.sys>0));
-        if(ex){
-          const fill={};['fat','mus','vis','bage','bmr'].forEach(q=>{if(!(ex[q]>0)&&rec[q]>0)fill[q]=rec[q]});
-          seen.add(k);
-          if(Object.keys(fill).length){merges.push({id:ex.id,fill});st.merged++}else st.dup++;
-          continue;
-        }
-      }
-      seen.add(k);toAdd.push(rec);st.added++;
+      omPlanRec(rec,st,ctx);
     }
     info.push(st);
   }
@@ -797,6 +813,72 @@ function omApply(plan){
 }
 function omUndoUI(){try{$('om-undo').style.display=localStorage.getItem(K+'-undo')?'block':'none'}catch(e){}}
 let omPlanData=null;
+/* ---------- Health Connect（僅 Android APK，需要原生外掛） ---------- */
+const hcPlugin=()=>{try{return window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()&&Capacitor.registerPlugin?Capacitor.registerPlugin('Health'):null}catch(e){return null}};
+function omShow(plan){
+  const out=$('om-sum');out.textContent='';
+  plan.info.forEach(st=>{
+    const d=document.createElement('div');
+    d.textContent=st.err?'「'+st.name+'」：'+st.err:'「'+st.name+'」：'+st.type+'，新增 '+st.added+(st.merged?'、補充既有體重 '+st.merged:'')+'、重複略過 '+st.dup+(st.from?'（'+st.from+' 到 '+st.to+'）':'');
+    out.appendChild(d);
+  });
+  $('om-go').style.display=(plan.toAdd.length+plan.merges.length)?'block':'none';
+}
+async function hcSync(){
+  const H=hcPlugin(),out=$('om-sum'),line=t=>{const d=document.createElement('div');d.textContent=t;out.appendChild(d)};
+  if(!H){out.textContent='這個功能只能在 Android APK 中使用。';return}
+  const days=+$('hc-days').value||30,allSrc=$('hc-all').checked,errs=[];
+  out.textContent='正在連線 Health Connect…';$('om-go').style.display='none';omPlanData=null;
+  try{
+    const av=await H.isAvailable();
+    if(!av||!av.available){out.textContent='此裝置無法使用 Health Connect：'+((av&&av.reason)||'未安裝或不支援')+'。';return}
+    const types=['weight','bodyFat','bloodPressure','basalCalories','heartRate'];
+    const au=await H.requestAuthorization({read:types,write:[],requestHistoryAccess:days>30});
+    const denied=(au&&au.readDenied)||[];
+    const start=new Date(Date.now()-days*864e5).toISOString(),end=new Date().toISOString();
+    const get=async t=>{
+      if(denied.includes(t))return [];
+      try{const r=await H.readSamples({dataType:t,startDate:start,endDate:end,limit:5000,ascending:true});return r.samples||[]}
+      catch(e){errs.push(t+'：'+(e&&e.message?e.message:e));return []}
+    };
+    const w=await get('weight'),f=await get('bodyFat'),bp=await get('bloodPressure'),bm=await get('basalCalories'),hr=await get('heartRate');
+    const src={};[].concat(w,f,bp,bm,hr).forEach(s=>{const k=s.sourceName||s.sourceId||'未知來源';src[k]=(src[k]||0)+1});
+    const isOm=s=>allSrc||/omron/i.test((s.sourceId||'')+' '+(s.sourceName||''));
+    const loc=iso=>{const d=new Date(iso);return {date:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()),time:pad(d.getHours())+':'+pad(d.getMinutes()),t:d.getTime()}};
+    const blank=(l)=>({date:l.date,sys:0,dia:0,pul:0,wt:0,fat:0,mus:0,vis:0,bage:0,bmr:0,note:l.time});
+    const recs=[],hrs=hr.filter(isOm);
+    bp.filter(isOm).forEach(s=>{
+      const l=loc(s.startDate),sy=Math.round(+s.systolic||0),di=Math.round(+s.diastolic||0);
+      if(!(sy>0&&di>0))return;
+      let pul=0,best=1e9;hrs.forEach(h=>{const dt=Math.abs(new Date(h.startDate).getTime()-l.t);if(dt<=120000&&dt<best){best=dt;pul=Math.round(+h.value||0)}});
+      const r=blank(l);r.sys=sy;r.dia=di;r.pul=pul;recs.push(r);
+    });
+    const body={},slot=s=>{const l=loc(s.startDate);return body[l.date+' '+l.time]||(body[l.date+' '+l.time]=blank(l))};
+    w.filter(isOm).forEach(s=>{if(s.value>0)slot(s).wt=+(+s.value).toFixed(1)});
+    f.filter(isOm).forEach(s=>{if(s.value>0)slot(s).fat=+(+s.value).toFixed(1)});
+    bm.filter(isOm).forEach(s=>{if(s.value>0)slot(s).bmr=Math.round(+s.value)});
+    const bl=Object.values(body).sort((a,b)=>(a.date+a.note<b.date+b.note?-1:1));
+    bl.filter(r=>!(r.wt>0)).forEach(r=>{
+      const t=bl.find(x=>x.wt>0&&x.date===r.date&&Math.abs(omMin(x.note)-omMin(r.note))<=2);
+      if(t){['fat','bmr'].forEach(k=>{if(!(t[k]>0))t[k]=r[k]});r._m=1}
+    });
+    bl.filter(r=>!r._m).forEach(r=>recs.push(r));
+    recs.sort((a,b)=>(a.date+a.note<b.date+b.note?-1:1));
+    const st={name:'Health Connect（最近 '+days+' 天）',type:'血壓／體重／體組成',added:0,merged:0,dup:0,skipped:0,from:'',to:'',err:''};
+    const ctx={seen:new Set(S.entries.map(omKey)),toAdd:[],merges:[]};
+    recs.forEach(r=>omPlanRec(r,st,ctx));
+    omPlanData={toAdd:ctx.toAdd,merges:ctx.merges,info:[st]};
+    if(!recs.length)st.err='沒有找到'+(allSrc?'':' Omron ')+'的資料。';
+    omShow(omPlanData);
+    const names=Object.keys(src).map(k=>k+' '+src[k]+' 筆').join('、');
+    line('Health Connect 內找到的來源：'+(names||'無')+'。');
+    if(denied.length)line('未授權的項目：'+denied.join('、')+'。');
+    if(days>30&&au&&au.historyAccessAuthorized===false)line('沒有取得歷史資料權限，Health Connect 只會提供大約 30 天內的資料。');
+    errs.forEach(e=>line('讀取失敗：'+e));
+    line('骨骼肌、內臟脂肪、身體年齡不在 Health Connect 中，請另外匯入 Omron CSV。');
+  }catch(e){out.textContent='Health Connect 同步失敗：'+(e&&e.message?e.message:e)+'。如果訊息提到外掛未實作，代表這個 APK 尚未包含 Health Connect 外掛，請依 README 重新建置。'}
+}
+if(hcPlugin()){$('hc-box').style.display='block';$('hc-btn').onclick=hcSync}
 $('om-file').onchange=async ev=>{
   const files=[...(ev.target.files||[])];
   $('om-sum').textContent='';omPlanData=null;$('om-go').style.display='none';
