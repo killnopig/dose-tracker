@@ -252,6 +252,7 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 </details>
 </main>
 
+<div id="toast" role="status" aria-live="polite" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(70px + env(safe-area-inset-bottom,0px));background:var(--btn);color:var(--btnt);padding:10px 18px;border-radius:999px;font-weight:600;font-size:15px;z-index:30;box-shadow:0 4px 18px rgba(0,0,0,.35);max-width:90%;text-align:center"></div>
 <div id="bk-ask" class="card" style="display:none;position:fixed;left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:20;margin:0 auto;max-width:496px;box-shadow:0 4px 18px rgba(0,0,0,.35);border-color:var(--dose)">
   <div id="bk-ask-t" style="font-weight:600"></div>
   <div class="row"><button id="bk-ask-yes" style="margin-top:10px">連線並備份</button><button id="bk-ask-no" class="sec" style="margin-top:10px">先不要</button></div>
@@ -767,6 +768,8 @@ const FN='dose-tracker'+ENV+'.json',SCOPE='https://www.googleapis.com/auth/drive
 let tok=null,tokExp=0,tc=null,fid=null,tmr=null,linked=false;
 try{linked=localStorage.getItem('dt-linked'+ENV)==='1'}catch(e){}
 const setSync=t=>{$('sync').textContent=t};
+let toastTmr=null;
+function toast(t,bad){const el=$('toast');if(!el)return;el.textContent=t;el.style.background=bad?'var(--wt)':'var(--btn)';el.style.display='block';clearTimeout(toastTmr);toastTmr=setTimeout(()=>{el.style.display='none'},3000)}
 const ready=()=>tok&&Date.now()<tokExp-60000;
 function updUI(){
   $('gd-btn').textContent=linked?(ready()?'立即同步':'重新連線 Google Drive'):'連線 Google Drive';
@@ -795,8 +798,8 @@ async function pushRemote(){
       const r=await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body});
       fid=(await r.json()).id;
     }
-    setSync('已備份到 Google Drive');bkMark();
-  }catch(e){setSync('Drive 備份失敗，資料仍在本機（點此重新連線）')}
+    setSync('已備份到 Google Drive');bkMark();toast('✓ 已備份到 Google Drive');
+  }catch(e){setSync('Drive 備份失敗，資料仍在本機（點此重新連線）');toast('✗ 備份失敗，資料仍在本機',true)}
 }
 function schedPush(){if(!linked)return;setSync('同步中…');clearTimeout(tmr);tmr=setTimeout(pushRemote,800)}
 async function pullAndMerge(){
@@ -859,7 +862,7 @@ $('gd-main').onclick=importMain;
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.9.10';
+const APP_VERSION='1.9.11';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
