@@ -37,6 +37,9 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 .cv{position:relative;height:250px}
 .cv canvas{touch-action:pan-y}
 .note{font-size:13px;color:var(--mu)}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.seg button{margin:0;width:auto;padding:6px 12px;font-size:13px;background:transparent;color:var(--mu);border:1px solid var(--ln);font-weight:400}
+.seg button.on{color:var(--tx);border-color:var(--tx);font-weight:600}
 .empty{color:var(--mu);text-align:center;padding:18px 0}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .p{color:var(--c3);font-weight:600}.q{color:var(--c4);font-weight:600}
@@ -51,6 +54,8 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
 <h1>注射與體重記錄 <span id="ver" class="note" style="font-weight:400;font-size:13px;margin-left:6px"></span></h1>
 <div class="note" id="betatag" style="display:none;margin:-6px 0 6px;color:var(--wt)">測試版：資料與正式版分開儲存</div>
 <div class="note" id="sync" style="margin:-6px 0 10px;cursor:pointer">本機儲存</div>
+<div class="card" id="bk-rem" style="display:none;border-color:var(--wt)"><b>建議備份資料</b><div class="note" id="bk-rem-t" style="margin:4px 0 0"></div>
+  <div class="row"><button id="bk-go" style="margin-top:10px">立即備份</button><button id="bk-skip" class="sec" style="margin-top:10px">今天先不要</button></div></div>
 
 <section id="p-log" class="pane on">
   <div class="stats">
@@ -120,11 +125,12 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
       <button id="exp-copy" class="sec">複製圖片</button>
     </div>
   </div>
+  <div class="card" id="range-card"><b>圖表範圍</b><div class="seg" id="seg-range"></div><div class="note">只影響圖表與截圖，不會刪除任何記錄。</div></div>
   <div class="empty" id="chart-empty">還沒有可畫圖的資料。</div>
   <div class="card" id="card-w"><b>體重</b><div class="cv"><canvas id="cv-w"></canvas></div></div>
   <div class="card" id="card-d"><b>劑量與預估體內殘留</b><div class="cv"><canvas id="cv-d"></canvas></div>
   <p class="note">殘留量依半衰期以指數衰減估算，假設注射後立即吸收，僅供趨勢參考，不是醫療建議。</p></div>
-  <div class="card" id="card-bp"><b>血壓與脈搏</b><div class="cv"><canvas id="cv-bp"></canvas></div></div>
+  <div class="card" id="card-bp"><b>血壓與脈搏</b><div class="seg" id="seg-bp"></div><div class="cv"><canvas id="cv-bp"></canvas></div><p class="note" id="bp-note"></p></div>
   <div class="card" id="card-bmi"><b>BMI</b><div class="cv"><canvas id="cv-bmi"></canvas></div>
   <p class="note">依「設定」中的身高計算。虛線為台灣成人標準的過重（24）與肥胖（27）界線。</p></div>
   <div class="card" id="card-bm"><b>身體年齡與基礎代謝</b><div class="cv"><canvas id="cv-bm"></canvas></div></div>
@@ -145,6 +151,14 @@ button.x{width:auto;margin:0;padding:6px 10px;background:transparent;color:var(-
     <input type="number" id="hl" inputmode="decimal" min="1">
     <p class="note">Tirzepatide 約 120 小時，Semaglutide 約 160 小時。</p>
     <button id="save-hl">儲存半衰期</button>
+  </div>
+  <div class="card">
+    <b>外觀與提醒</b>
+    <label for="theme">主題</label>
+    <select id="theme"><option value="auto">跟隨系統</option><option value="light">淺色</option><option value="dark">深色</option></select>
+    <label for="bkdays">備份提醒</label>
+    <select id="bkdays"><option value="0">不提醒</option><option value="3">超過 3 天沒備份</option><option value="7">超過 7 天沒備份</option><option value="14">超過 14 天沒備份</option><option value="30">超過 30 天沒備份</option></select>
+    <p class="note">只有在這段時間內有新記錄、卻還沒備份時才會提醒。主題與提醒設定只存在這台裝置。</p>
   </div>
   <div class="card" id="omron-card">
     <b>匯入 Omron CSV</b>
@@ -235,6 +249,9 @@ let S={entries:[],hl:120,h:0,tw:0,ts:0};
 try{const r=localStorage.getItem(K);if(r){const p=JSON.parse(r);if(p&&Array.isArray(p.entries))S={entries:p.entries,hl:Number(p.hl)||120,h:Number(p.h)||0,tw:Number(p.tw)||0,ts:Number(p.ts)||0}}}catch(e){}
 const save=()=>{S.ts=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}schedPush()};
 const $=id=>document.getElementById(id);
+const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+function applyTheme(){const de=document.documentElement;if(!de||!de.setAttribute)return;const t=LS.get('dt-theme','auto');if(t==='light'||t==='dark')de.setAttribute('data-theme',t);else de.removeAttribute('data-theme')}
+applyTheme();
 const pad=n=>String(n).padStart(2,'0');
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
 const dn=s=>{const [y,m,d]=s.split('-').map(Number);return Math.round(Date.UTC(y,m-1,d)/864e5)};
@@ -242,6 +259,10 @@ const fromDn=n=>{const d=new Date(n*864e5);return d.getUTCFullYear()+'-'+pad(d.g
 const md=s=>s.slice(5).replace('-','/');
 const sorted=()=>S.entries.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.id-b.id);
 const onBoard=(day)=>{const k=Math.LN2/(S.hl/24);let t=0;for(const e of S.entries){if(e.dose>0){const x=day-dn(e.date);if(x>=0)t+=e.dose*Math.exp(-k*x)}}return t};
+let RANGE=LS.get('dt-range','all'),BPV=LS.get('dt-bpv','all');
+const rangeCut=()=>RANGE==='all'?'':fromDn(dn(today())-(+RANGE)+1);
+const inR=e=>{const c=rangeCut();return !c||e.date>=c};
+function seg(id,opts,get,set){const c=$(id);c.textContent='';opts.forEach(([v,t])=>{const b=document.createElement('button');b.textContent=t;if(get()===v)b.className='on';b.onclick=()=>{set(v);seg(id,opts,get,set);drawCharts()};c.appendChild(b)})}
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let cw=null,cd=null;
 let editId=null,moreTouched=false,listLim=30;
@@ -261,6 +282,16 @@ function cancelEdit(){
   ['sys','dia','pul','fat','mus','vis','bage','bmr'].forEach(k=>{$('f-'+k).value=''});
   $('f-site').value=nextSite();
 }
+function updBk(){
+  const el=$('bk-rem');if(!el)return;
+  const days=+LS.get('dt-bkdays','7'),last=+LS.get('dt-lastbk'+ENV,'0');
+  const dirty=S.entries.length>0&&(!last||(S.ts||0)>last);
+  const age=last?(Date.now()-last)/864e5:Infinity;
+  const show=days>0&&dirty&&age>=days&&LS.get('dt-bkhide'+ENV,'')!==today();
+  el.style.display=show?'':'none';
+  if(show)$('bk-rem-t').textContent=last?'已經 '+Math.floor(age)+' 天沒有備份，這段期間有新的記錄。':'還沒有備份過，資料目前只存在這個瀏覽器。';
+}
+function bkMark(){LS.set('dt-lastbk'+ENV,String(Date.now()));updBk()}
 const SITES=['左腹','腹中','右腹','左大腿','右大腿','左上臂','右上臂'];
 function nextSite(){const l=sorted().filter(e=>e.dose>0&&e.site).pop();const i=l?SITES.indexOf(l.site):-1;return SITES[(i+1)%SITES.length]}
 SITES.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;$('f-site').appendChild(o)});
@@ -277,7 +308,7 @@ function render(){
   if(lw&&S.h>0){const m=S.h/100,b=lw/(m*m);$('s-b').textContent=b.toFixed(1);$('s-bs').textContent='BMI（'+(b<18.5?'過輕':b<24?'正常':b<27?'過重':'肥胖')+'）'}else{$('s-b').textContent='–';$('s-bs').textContent='BMI（請在設定輸入身高）'}
   if(lw&&S.tw>0){const g=lw-S.tw;$('s-t').textContent=g>0?g.toFixed(1):'已達成';$('s-ts').textContent='距離目標 '+S.tw+' kg'}else{$('s-t').textContent='–';$('s-ts').textContent='距離目標（請在設定輸入）'}
   const last=ds[ds.length-1];
-  if(last){const due=dn(last.date)+7,left=due-dn(today());const wd='日一二三四五六'[new Date(due*864e5).getUTCDay()];$('s-n').textContent='下次注射：'+md(fromDn(due))+'（週'+wd+'）';$('s-ns').textContent=(left>0?'還有 '+left+' 天':left===0?'就是今天':'已逾期 '+(-left)+' 天')+'，建議部位：'+nextSite()}
+  if(last){const due=dn(last.date)+7,left=due-dn(today());const wd='日一二三四五六'[new Date(due*864e5).getUTCDay()];$('s-n').textContent='下次注射：'+md(fromDn(due))+'（週'+wd+'）';$('s-n').style.color=left<=0?'var(--wt)':'';$('s-ns').textContent=(left>0?'還有 '+left+' 天':left===0?'就是今天':'已逾期 '+(-left)+' 天')+'，建議部位：'+nextSite()}
   else{$('s-n').textContent='尚無注射記錄';$('s-ns').textContent='建議第一針部位：'+SITES[0]}
   if(editId===null)$('f-site').value=nextSite();
   const sh=(id,c)=>{$(id).style.display=c?'':'none'};
@@ -317,6 +348,7 @@ function render(){
     const bx=document.createElement('div');bx.style.cssText='display:flex;gap:6px;flex-shrink:0';bx.appendChild(ed);bx.appendChild(x);
     it.appendChild(l);it.appendChild(bx);L.appendChild(it);
   });
+  updBk();
   if(es.length>listLim){const mb=document.createElement('button');mb.className='sec';mb.textContent='顯示更多（還有 '+(es.length-listLim)+' 筆）';mb.onclick=()=>{listLim+=50;render()};L.appendChild(mb)}
 }
 
@@ -329,7 +361,7 @@ function showErr(cid,e){
 /* 產生各圖表的設定；畫面與截圖共用，只差在調色盤 */
 function chartSpecs(pal){
   const {tx,mu,ln,dc,wc,c3,c4}=pal;
-  const es=sorted(),ws=es.filter(e=>e.wt>0),ds=es.filter(e=>e.dose>0);
+  const all=sorted(),es=all.filter(inR),ws=es.filter(e=>e.wt>0),dsAll=all.filter(e=>e.dose>0);
   const bs=es.filter(e=>e.sys>0&&e.dia>0),bc=es.filter(e=>e.fat>0||e.mus>0||e.vis>0);
   const bm=es.filter(e=>e.bage>0||e.bmr>0),hb=S.h>0&&ws.length>0;
   const grid=()=>({color:ln}),tk=()=>({maxTicksLimit:8});
@@ -340,21 +372,47 @@ function chartSpecs(pal){
     sp.push({id:'cv-w',title:'體重 (kg)',dates:ws.map(e=>e.date),extra:i=>{const x=[];if(S.h>0)x.push('BMI '+(ws[i].wt/((S.h/100)*(S.h/100))).toFixed(1));if(omTime(ws[i]))x.push('時間 '+omTime(ws[i]));return x},cfg:{type:'line',data:{labels:ws.map(e=>md(e.date)),datasets:[ln3('體重 (kg)',ws.map(e=>e.wt),wc)].concat(S.tw>0?[{label:'目標 '+S.tw+' kg',data:ws.map(()=>S.tw),borderColor:mu,backgroundColor:mu,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]:[])},
       options:{maintainAspectRatio:false,plugins:{legend:{display:S.tw>0,labels:leg().labels}},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}}});
   }
-  if(ds.length){
+  if(dsAll.length){
     const labels=[],doses=[],ob=[],dts=[];
-    const a=dn(ds[0].date),b=Math.max(dn(today()),dn(ds[ds.length-1].date))+7;
-    const dm={};ds.forEach(e=>{dm[e.date]=(dm[e.date]||0)+e.dose});
+    const c0=rangeCut(),a=Math.max(dn(dsAll[0].date),c0?dn(c0):-1e9),b=Math.max(dn(today()),dn(dsAll[dsAll.length-1].date))+7;
+    const dm={};dsAll.forEach(e=>{dm[e.date]=(dm[e.date]||0)+e.dose});
     for(let i=a;i<=b;i++){const s2=fromDn(i);labels.push(md(s2));dts.push(s2);doses.push(dm[s2]||null);ob.push(+onBoard(i).toFixed(2))}
-    sp.push({id:'cv-d',title:'注射劑量與預估體內殘留 (mg)',dates:dts,extra:i=>ds.filter(e=>e.date===dts[i]).map(e=>'注射 '+e.dose+' mg'+(e.site?'（'+e.site+'）':'')),cfg:{data:{labels,datasets:[
+    sp.push({id:'cv-d',title:'注射劑量與預估體內殘留 (mg)',dates:dts,extra:i=>dsAll.filter(e=>e.date===dts[i]).map(e=>'注射 '+e.dose+' mg'+(e.site?'（'+e.site+'）':'')),cfg:{data:{labels,datasets:[
       {type:'bar',label:'注射劑量 (mg)',data:doses,backgroundColor:dc,order:2},
       {type:'line',label:'預估殘留 (mg)',data:ob,borderColor:wc,backgroundColor:wc,pointRadius:0,tension:.3,order:1}]},
       options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid(),beginAtZero:true}}}}});
   }
   if(bs.length){
-    const ds3=[ln3('收縮壓',bs.map(e=>e.sys),c3),ln3('舒張壓',bs.map(e=>e.dia),c4)];
-    if(bs.some(e=>e.pul>0))ds3.push(ln3('脈搏',bs.map(e=>e.pul>0?e.pul:null),mu,{borderDash:[4,3],pointRadius:2}));
-    sp.push({id:'cv-bp',title:'血壓與脈搏',dates:bs.map(e=>e.date),extra:i=>[omTime(bs[i])?'時間 '+omTime(bs[i]):'',(bs[i].note||'').replace(/^\d{1,2}:\d{2}[，,]?/,'')].filter(Boolean),cfg:{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},
-      options:{maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}}}});
+    const wt=e=>omTime(e);
+    const days={};bs.forEach(e=>{(days[e.date]=days[e.date]||[]).push(e)});
+    const dl=Object.keys(days).sort();
+    const av=(a,f)=>{const v=a.map(f).filter(x=>x>0);return v.length?Math.round(v.reduce((p,q)=>p+q,0)/v.length):null};
+    const rg=(a,f)=>{const v=a.map(f).filter(x=>x>0);return v.length?Math.min(...v)+'–'+Math.max(...v):''};
+    const timed=bs.filter(e=>wt(e)).length;
+    const mode=BPV==='ampm'&&timed===0?'day':BPV;
+    const opt={maintainAspectRatio:false,plugins:{legend:leg()},scales:{x:{grid:grid(),ticks:tk()},y:{grid:grid()}}};
+    if(mode==='day'){
+      const d3=[ln3('收縮壓（日均）',dl.map(d=>av(days[d],e=>e.sys)),c3),ln3('舒張壓（日均）',dl.map(d=>av(days[d],e=>e.dia)),c4)];
+      if(bs.some(e=>e.pul>0))d3.push(ln3('脈搏（日均）',dl.map(d=>av(days[d],e=>e.pul)),mu,{borderDash:[4,3],pointRadius:2}));
+      sp.push({id:'cv-bp',title:'血壓與脈搏（每日平均）',dates:dl,
+        note:(BPV==='ampm'?'這段範圍內的血壓記錄都沒有量測時間，無法分早晚，已改為每日平均。':'同一天多次量測取平均；提示框會顯示當天次數與範圍。'),
+        extra:i=>{const a=days[dl[i]],x=[a.length+' 次量測'];const r1=rg(a,e=>e.sys),r2=rg(a,e=>e.dia);if(a.length>1)x.push('收縮壓 '+r1+'，舒張壓 '+r2);return x},
+        cfg:{type:'line',data:{labels:dl.map(md),datasets:d3},options:opt}});
+    }else if(mode==='ampm'){
+      const part=(d,am)=>days[d].filter(e=>{const t=wt(e);return t&&((parseInt(t)<12)===am)});
+      const mk2=(lab,am,f,color,dash)=>ln3(lab,dl.map(d=>av(part(d,am),f)),color,{borderDash:dash||[],pointRadius:3});
+      const d3=[mk2('早上 收縮壓',true,e=>e.sys,c3),mk2('早上 舒張壓',true,e=>e.dia,c4),mk2('晚上 收縮壓',false,e=>e.sys,c3,[5,3]),mk2('晚上 舒張壓',false,e=>e.dia,c4,[5,3])];
+      const nt=bs.length-timed;
+      sp.push({id:'cv-bp',title:'血壓（早／晚分開）',dates:dl,
+        note:'早上＝12:00 前量測，晚上＝12:00 後，實線為早上、虛線為晚上，同時段多次量測取平均。'+(nt?'有 '+nt+' 筆沒有量測時間，未納入此圖。':''),
+        extra:i=>{const x=[];[['早上',true],['晚上',false]].forEach(([n,am])=>{const a=part(dl[i],am);if(a.length)x.push(n+' '+a.length+' 次')});return x},
+        cfg:{type:'line',data:{labels:dl.map(md),datasets:d3},options:opt}});
+    }else{
+      const ds3=[ln3('收縮壓',bs.map(e=>e.sys),c3),ln3('舒張壓',bs.map(e=>e.dia),c4)];
+      if(bs.some(e=>e.pul>0))ds3.push(ln3('脈搏',bs.map(e=>e.pul>0?e.pul:null),mu,{borderDash:[4,3],pointRadius:2}));
+      sp.push({id:'cv-bp',title:'血壓與脈搏',dates:bs.map(e=>e.date),note:'',extra:i=>[wt(bs[i])?'時間 '+wt(bs[i]):'',(bs[i].note||'').replace(/^\d{1,2}:\d{2}[，,]?/,'')].filter(Boolean),
+        cfg:{type:'line',data:{labels:bs.map(e=>md(e.date)),datasets:ds3},options:opt}});
+    }
   }
   if(hb){
     const m2=(S.h/100)*(S.h/100);
@@ -403,7 +461,7 @@ function drawCharts(){
   document.querySelectorAll('.cerr').forEach(n=>n.remove());
   const sh=(id,c)=>{$(id).style.display=c?'':'none'};
   if(typeof Chart==='undefined'){
-    ['card-w','card-d','card-bp','card-bmi','card-bm','card-bc','exp-card'].forEach(id=>{$(id).style.display='none'});
+    ['card-w','card-d','card-bp','card-bmi','card-bm','card-bc','exp-card','range-card'].forEach(id=>{$(id).style.display='none'});
     $('chart-empty').textContent='圖表函式庫載入失敗，請確認網路或 VPN 沒有擋住 cdnjs.cloudflare.com，然後重新整理頁面。';
     $('chart-empty').style.display='';
     return;
@@ -412,14 +470,17 @@ function drawCharts(){
   const pal={tx:css('--tx'),mu:css('--mu'),ln:css('--ln'),dc:css('--dose'),wc:css('--wt'),c3:css('--c3'),c4:css('--c4')};
   Chart.defaults.color=pal.mu;Chart.defaults.font.family='"Noto Sans TC",system-ui,sans-serif';
   live.forEach(c=>{if(c)c.destroy()});live=[];
-  const es=sorted(),ws=es.filter(e=>e.wt>0),ds=es.filter(e=>e.dose>0);
+  const all=sorted(),es=all.filter(inR),ws=es.filter(e=>e.wt>0),dsAll=all.filter(e=>e.dose>0);
   const bs=es.filter(e=>e.sys>0&&e.dia>0),bc=es.filter(e=>e.fat>0||e.mus>0||e.vis>0);
   const bm=es.filter(e=>e.bage>0||e.bmr>0),hb=S.h>0&&ws.length>0;
-  sh('card-w',ws.length>0);sh('card-d',ds.length>0);sh('card-bp',bs.length>0);sh('card-bc',bc.length>0);
+  sh('card-w',ws.length>0);sh('card-d',dsAll.length>0);sh('card-bp',bs.length>0);sh('card-bc',bc.length>0);
   sh('card-bmi',hb);sh('card-bm',bm.length>0);
-  const any=!!(ws.length||ds.length||bs.length||bc.length||bm.length);
-  sh('chart-empty',!any);sh('exp-card',any);
-  chartSpecs(pal).forEach(sp=>{addHover(sp,pal);live.push(mk(sp.id,sp.cfg))});
+  const any=!!(all.some(e=>e.wt>0||e.dose>0||e.sys>0||e.fat>0||e.mus>0||e.vis>0||e.bage>0||e.bmr>0));
+  sh('chart-empty',!any);sh('exp-card',any);sh('range-card',any);
+  seg('seg-range',[['30','近 30 天'],['90','近 90 天'],['all','全部']],()=>RANGE,v=>{RANGE=v;LS.set('dt-range',v)});
+  seg('seg-bp',[['all','全部量測'],['day','每日平均'],['ampm','早／晚分開']],()=>BPV,v=>{BPV=v;LS.set('dt-bpv',v)});
+  const specs=chartSpecs(pal),bsp=specs.find(z=>z.id==='cv-bp');$('bp-note').textContent=bsp&&bsp.note?bsp.note:'';
+  specs.forEach(sp=>{addHover(sp,pal);live.push(mk(sp.id,sp.cfg))});
 }
 
 /* ---------- 圖表截圖：所有圖表合成一張高解析度圖片 ---------- */
@@ -446,6 +507,7 @@ async function exportCharts(){
   if(S.h>0)prof.push('身高 '+S.h+' cm');
   if(S.tw>0)prof.push('目標體重 '+S.tw+' kg');
   if(es.some(e=>e.dose>0))prof.push('藥物半衰期 '+S.hl+' 小時');
+  if(RANGE!=='all')prof.push('範圍 近 '+RANGE+' 天');
   prof.push('產生於 '+today());
   g.fillText(prof.join('　|　'),PAD,152);
   const prev={color:Chart.defaults.color,size:Chart.defaults.font.size};
@@ -670,7 +732,7 @@ async function pushRemote(){
       const r=await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body});
       fid=(await r.json()).id;
     }
-    setSync('已備份到 Google Drive');
+    setSync('已備份到 Google Drive');bkMark();
   }catch(e){setSync('Drive 備份失敗，資料仍在本機（點此重新連線）')}
 }
 function schedPush(){if(!linked)return;setSync('同步中…');clearTimeout(tmr);tmr=setTimeout(pushRemote,800)}
@@ -684,7 +746,7 @@ async function pullAndMerge(){
       try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
       $('hl').value=S.hl;$('h').value=S.h||'';$('tw').value=S.tw||'';render();
       if($('p-chart').classList.contains('on'))drawCharts();
-      setSync('已從 Google Drive 載入');return;
+      setSync('已從 Google Drive 載入');bkMark();return;
     }
   }
   await pushRemote();
@@ -713,7 +775,7 @@ $('gd-off').onclick=()=>{
 updUI();
 if(linked)setSync('Google Drive 已連結，連線中…');
 window.addEventListener('load',()=>{if(linked)connect(false)});
-const APP_VERSION='1.8.0';
+const APP_VERSION='1.9.0';
 $('ver').textContent='版本 '+APP_VERSION;
 if(ENV){$('betatag').style.display='';$('ver').textContent+='（測試版）'}
 let updShown=false;
@@ -728,6 +790,17 @@ async function checkUpdate(){
   }catch(e){}
 }
 $('cancel-edit').onclick=cancelEdit;
+$('theme').value=LS.get('dt-theme','auto');
+$('theme').onchange=()=>{LS.set('dt-theme',$('theme').value);applyTheme();if($('p-chart').classList.contains('on'))drawCharts()};
+$('bkdays').value=LS.get('dt-bkdays','7');
+$('bkdays').onchange=()=>{LS.set('dt-bkdays',$('bkdays').value);updBk()};
+$('bk-skip').onclick=()=>{LS.set('dt-bkhide'+ENV,today());updBk()};
+$('bk-go').onclick=()=>{
+  if(linked&&ready()){$('gd-btn').onclick();return}
+  if(linked){connect(true);return}
+  const t=document.querySelector('.tabs button[data-t="set"]');if(t)t.click();
+  setTimeout(()=>{try{$('gd-btn').scrollIntoView({behavior:'smooth',block:'center'})}catch(e){}},50);
+};
 
 /* ---------- Omron CSV import ---------- */
 const OM_COLS={date:[/測量日期|日期|日時|date/i],time:[/^時間$|^time$/i],sys:[/收縮壓|systolic/i],dia:[/舒張壓|diastolic/i],pul:[/脈搏|pulse|bpm/i],irr:[/檢測到不規則脈波|irregular/i],mov:[/身體晃動|body movement/i],wt:[/體重|weight/i],fat:[/體脂|body fat/i],mus:[/骨骼肌|skeletal/i],vis:[/內臟脂肪|visceral/i],bage:[/身體年齡|體年齡|body age/i],bmr:[/基礎代謝|靜止代謝|resting metabolism|basal metabolic|bmr/i]};
@@ -964,7 +1037,7 @@ $('hl').value=S.hl;
 $('h').value=S.h||'';$('tw').value=S.tw||'';
 $('save-prof').onclick=()=>{S.h=parseFloat($('h').value)||0;S.tw=parseFloat($('tw').value)||0;save();render();$('save-prof').textContent='已儲存';setTimeout(()=>$('save-prof').textContent='儲存身高與目標',1500)};
 $('save-hl').onclick=()=>{const v=parseFloat($('hl').value);if(v>0){S.hl=v;save();render();$('save-hl').textContent='已儲存';setTimeout(()=>$('save-hl').textContent='儲存半衰期',1500)}};
-$('exp').onclick=()=>{$('bk').value=JSON.stringify(S);$('bk').select();$('bmsg').textContent='請全選複製，貼到備忘錄或傳給自己保存。'};
+$('exp').onclick=()=>{bkMark();$('bk').value=JSON.stringify(S);$('bk').select();$('bmsg').textContent='請全選複製，貼到備忘錄或傳給自己保存。'};
 $('imp').onclick=()=>{
   try{const p=JSON.parse($('bk').value.replace(/```(json)?/g,'').trim());if(!p||!Array.isArray(p.entries))throw 0;
     S={entries:p.entries.filter(e=>e&&typeof e.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(e.date)).map((e,i)=>({id:e.id||Date.now()+i,date:e.date,dose:+e.dose||0,wt:+e.wt||0,sys:+e.sys||0,dia:+e.dia||0,pul:+e.pul||0,fat:+e.fat||0,mus:+e.mus||0,vis:+e.vis||0,bage:+e.bage||0,bmr:+e.bmr||0,note:String(e.note||''),site:SITES.includes(e.site)?e.site:''})),hl:Number(p.hl)||120,h:Number(p.h)||0,tw:Number(p.tw)||0};
